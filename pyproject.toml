@@ -6,10 +6,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "polyfriture"
-description = "A Friture fork for real-time audio monitoring and visualization"
+description = "Real-time visualization of live audio data"
 license = {file = "COPYING.txt"}
 readme = "README.rst"
 authors = [
+    {name = "Timothée Lecomte", email = "contact@friture.org"},
     {name = "Will Hirsch", email = "contact@willh.uk"},
 ]
 maintainers = [{name = "Will Hirsch"}]
