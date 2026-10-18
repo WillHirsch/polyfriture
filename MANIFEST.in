@@ -1,9 +1,8 @@
 include COPYING.txt
-include INSTALL.txt
+include INSTALL.md
 include PROFILING.txt
 include README.rst
-include TODO.txt
-include friture.py
-recursive-include friture *.qml
-recursive-include friture *.js
-recursive-include friture/data *.npz
+include main.py
+recursive-include friture_monitor *.qml
+recursive-include friture_monitor *.js
+recursive-include friture_monitor/data *.npz

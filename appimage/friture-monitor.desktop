@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=friture-monitor
+Comment=Real-time visualization of live audio data
+Icon=friture-monitor
+Exec=friture-monitor
+StartupWMClass=friture-monitor
+Terminal=false
+Categories=AudioVideo;Audio;
+Keywords=audio;spectrum;spectrogram;

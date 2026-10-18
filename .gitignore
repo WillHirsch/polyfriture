@@ -26,6 +26,7 @@ venv/*
 .venv/
 tools/*
 friture.egg-info
+friture_monitor.egg-info
 .eggs/
 *.appx
 *.msix

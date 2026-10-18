@@ -41,7 +41,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = 'Friture'
+project = 'friture-monitor'
 copyright = '2012, Timothée Lecomte'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -165,7 +165,7 @@ html_static_path = ['_static']
 #html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'Frituredoc'
+htmlhelp_basename = 'friture-monitor-doc'
 
 
 # -- Options for LaTeX output --------------------------------------------------
@@ -179,7 +179,7 @@ htmlhelp_basename = 'Frituredoc'
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
-  ('index', 'Friture.tex', 'Friture Documentation',
+  ('index', 'friture-monitor.tex', 'friture-monitor Documentation',
    'Timothée Lecomte', 'manual'),
 ]
 
@@ -212,6 +212,6 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'friture', 'Friture Documentation',
+    ('index', 'friture-monitor', 'friture-monitor Documentation',
      ['Timothée Lecomte'], 1)
 ]

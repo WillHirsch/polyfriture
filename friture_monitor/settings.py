@@ -1,0 +1,237 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+# Copyright (C) 2009 Timothée Lecomte
+
+# This file is part of Friture.
+#
+# Friture is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License version 3 as published by
+# the Free Software Foundation.
+#
+# Friture is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Friture.  If not, see <http://www.gnu.org/licenses/>.
+
+import sys
+import logging
+
+from PyQt6 import QtCore, QtWidgets
+from PyQt6.QtCore import pyqtSignal, pyqtProperty  # type: ignore
+from friture_monitor.audiobackend import AudioBackend
+from friture_monitor.application import APPLICATION_NAME
+from friture_monitor.main_toolbar_view_model import MainToolbarViewModel
+from friture_monitor.ui_settings import Ui_Settings_Dialog
+
+no_input_device_title = "No audio input device found"
+
+no_input_device_message = f"""No audio input device has been found.
+
+{APPLICATION_NAME} needs at least one input device. Please check your audio configuration.
+
+{APPLICATION_NAME} will now exit.
+"""
+
+
+class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
+    show_playback_changed = pyqtSignal(bool)
+    history_length_changed = pyqtSignal(int)
+    theme_preference_changed = pyqtSignal(int)
+
+    def __init__(self, parent, toolbar_view_model: MainToolbarViewModel):
+        QtWidgets.QDialog.__init__(self, parent)
+        Ui_Settings_Dialog.__init__(self)
+
+        self.logger = logging.getLogger(__name__)
+
+        self._toolbar_view_model = toolbar_view_model
+
+        # Setup the user interface
+        self.setupUi(self)
+
+        self.themeButtonGroup.idToggled.connect(self.theme_preference_toggled)
+        # Set explicit IDs for theme buttons to match ThemeManager enum values
+        # 0 = System (Unknown), 1 = Light, 2 = Dark
+        self.themeButtonGroup.setId(self.radioButton_themeSystem, 0)
+        self.themeButtonGroup.setId(self.radioButton_themeLight, 1)
+        self.themeButtonGroup.setId(self.radioButton_themeDark, 2)
+
+        devices = AudioBackend().get_readable_devices_list()
+
+        if devices == []:
+            # no audio input device
+            if QtWidgets.QApplication.instance().platformName() == "offscreen":
+                # Headless (e.g. the CI smoke test).
+                # Log and continue with an empty device set instead of exiting,
+                # for validation purposes.
+                self.logger.warning("No audio input device available; continuing in headless mode")
+                return
+            # display a message and exit
+            QtWidgets.QMessageBox.critical(self, no_input_device_title, no_input_device_message)
+            QtCore.QTimer.singleShot(0, self.exitOnInit)
+            sys.exit(1)
+            return
+
+        for device in devices:
+            self.comboBox_inputDevice.addItem(device)
+
+        channels = AudioBackend().get_readable_current_channels()
+        for channel in channels:
+            self.comboBox_firstChannel.addItem(channel)
+            self.comboBox_secondChannel.addItem(channel)
+
+        current_device = AudioBackend().get_readable_current_device()
+        self.comboBox_inputDevice.setCurrentIndex(current_device)
+
+        first_channel = AudioBackend().get_current_first_channel()
+        self.comboBox_firstChannel.setCurrentIndex(first_channel)
+        second_channel = AudioBackend().get_current_second_channel()
+        self.comboBox_secondChannel.setCurrentIndex(second_channel)
+
+        # signals
+        self.comboBox_inputDevice.currentIndexChanged.connect(self.input_device_changed)
+        self.comboBox_firstChannel.activated.connect(self.first_channel_changed)
+        self.comboBox_secondChannel.activated.connect(self.second_channel_changed)
+        self.radioButton_single.toggled.connect(self.single_input_type_selected)
+        self.radioButton_duo.toggled.connect(self.duo_input_type_selected)
+        self.checkbox_showPlayback.stateChanged.connect(self.show_playback_checkbox_changed)
+        self.spinBox_historyLength.editingFinished.connect(self.history_length_edit_finished)
+
+    @pyqtProperty(bool, notify=show_playback_changed) # type: ignore
+    def show_playback(self) -> bool:
+        return self.checkbox_showPlayback.checkState() == QtCore.Qt.CheckState.Checked
+
+    # slot
+    # used when no audio input device has been found, to exit immediately
+    def exitOnInit(self):
+        QtWidgets.QApplication.instance().quit()
+
+    # slot
+    def input_device_changed(self, index):
+        self._toolbar_view_model.recording = False
+
+        success, index = AudioBackend().select_input_device(index)
+
+        self.comboBox_inputDevice.setCurrentIndex(index)
+
+        if not success:
+            # Note: the error message is a child of the settings dialog, so that
+            # that dialog remains on top when the error message is closed
+            error_message = QtWidgets.QErrorMessage(self)
+            error_message.setWindowTitle("Input device error")
+            error_message.showMessage("Impossible to use the selected input device, reverting to the previous one")
+
+        # reset the channels
+        channels = AudioBackend().get_readable_current_channels()
+
+        self.comboBox_firstChannel.clear()
+        self.comboBox_secondChannel.clear()
+
+        for channel in channels:
+            self.comboBox_firstChannel.addItem(channel)
+            self.comboBox_secondChannel.addItem(channel)
+
+        first_channel = AudioBackend().get_current_first_channel()
+        self.comboBox_firstChannel.setCurrentIndex(first_channel)
+        second_channel = AudioBackend().get_current_second_channel()
+        self.comboBox_secondChannel.setCurrentIndex(second_channel)
+
+        self._toolbar_view_model.recording = True
+
+    # slot
+    def first_channel_changed(self, index):
+        self._toolbar_view_model.recording = False
+
+        success, index = AudioBackend().select_first_channel(index)
+
+        self.comboBox_firstChannel.setCurrentIndex(index)
+
+        if not success:
+            # Note: the error message is a child of the settings dialog, so that
+            # that dialog remains on top when the error message is closed
+            error_message = QtWidgets.QErrorMessage(self)
+            error_message.setWindowTitle("Input device error")
+            error_message.showMessage("Impossible to use the selected channel as the first channel, reverting to the previous one")
+
+        self._toolbar_view_model.recording = True
+
+    # slot
+    def second_channel_changed(self, index):
+        self._toolbar_view_model.recording = False
+
+        success, index = AudioBackend().select_second_channel(index)
+
+        self.comboBox_secondChannel.setCurrentIndex(index)
+
+        if not success:
+            # Note: the error message is a child of the settings dialog, so that
+            # that dialog remains on top when the error message is closed
+            error_message = QtWidgets.QErrorMessage(self)
+            error_message.setWindowTitle("Input device error")
+            error_message.showMessage("Impossible to use the selected channel as the second channel, reverting to the previous one")
+
+        self._toolbar_view_model.recording = True
+
+    # slot
+    def single_input_type_selected(self, checked):
+        if checked:
+            self.groupBox_second.setEnabled(False)
+            AudioBackend().set_single_input()
+            self.logger.info("Switching to single input")
+
+    # slot
+    def duo_input_type_selected(self, checked):
+        if checked:
+            self.groupBox_second.setEnabled(True)
+            AudioBackend().set_duo_input()
+            self.logger.info("Switching to difference between two inputs")
+
+    # slot
+    def show_playback_checkbox_changed(self, state: int) -> None:
+        self.show_playback_changed.emit(state == QtCore.Qt.CheckState.Checked.value)
+
+    # slot
+    def history_length_edit_finished(self) -> None:
+        self.history_length_changed.emit(self.spinBox_historyLength.value())
+
+    # slot
+    def theme_preference_toggled(self, button_id: int, checked: bool) -> None:
+        if checked:
+            self.theme_preference_changed.emit(button_id)
+            self.logger.info("Theme preference changed to: %d", button_id)
+
+    # method
+    def saveState(self, settings):
+        # for the input device, we search by name instead of index, since
+        # we do not know if the device order stays the same between sessions
+        settings.setValue("deviceName", self.comboBox_inputDevice.currentText())
+        settings.setValue("firstChannel", self.comboBox_firstChannel.currentIndex())
+        settings.setValue("secondChannel", self.comboBox_secondChannel.currentIndex())
+        settings.setValue("duoInput", self.inputTypeButtonGroup.checkedId())
+        settings.setValue("showPlayback", self.checkbox_showPlayback.checkState().value)
+        settings.setValue("historyLength", self.spinBox_historyLength.value())
+        settings.setValue("themePreference", self.themeButtonGroup.checkedId())
+
+    # method
+    def restoreState(self, settings):
+        device_name = settings.value("deviceName", "")
+        device_index = self.comboBox_inputDevice.findText(device_name)
+        # change the device only if it exists in the device list
+        if device_index >= 0:
+            self.comboBox_inputDevice.setCurrentIndex(device_index)
+            channel = settings.value("firstChannel", 0, type=int)
+            self.comboBox_firstChannel.setCurrentIndex(channel)
+            channel = settings.value("secondChannel", 0, type=int)
+            self.comboBox_secondChannel.setCurrentIndex(channel)
+            duo_input_id = settings.value("duoInput", 0, type=int)
+            self.inputTypeButtonGroup.button(duo_input_id).setChecked(True)
+        self.checkbox_showPlayback.setCheckState(QtCore.Qt.CheckState(settings.value("showPlayback", 0, type=int)))
+        self.spinBox_historyLength.setValue(settings.value("historyLength", 30, type=int))
+        theme_preference_id = settings.value("themePreference", 0, type=int)
+        self.themeButtonGroup.button(theme_preference_id).setChecked(True)
+        # need to emit this because setValue doesn't emit editFinished
+        self.history_length_changed.emit(self.spinBox_historyLength.value())

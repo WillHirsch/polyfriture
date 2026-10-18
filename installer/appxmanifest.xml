@@ -4,16 +4,16 @@
 To build an MSIX package to publish to the Microsoft Store:
 
 1. enable Windows developer mode (to allow side-loading of an unsigned package)
-2. the build output is in a friture-bin folder
-3. friture-bin should contain AppxManifest.xml
+2. the build output is in a friture-monitor-bin folder
+3. friture-monitor-bin should contain AppxManifest.xml
 4. in that folder, run: Add-AppxPackage -Register .\AppxManifest.xml
 5. app should start from Windows Start menu
   - to deploy again, increase the version
 6. from the parent folder, run:
-PS C:\...\friture> MakeAppx pack /v /d .\friture-bin /p friture.msix
-7. friture.msix can be uploaded in a new submission to the Microsoft Partner Center
-   (this CI build produces an unsigned MSIX;
-   the Store signs the package on ingestion).
+PS C:\...\friture-monitor> MakeAppx pack /v /d .\friture-monitor-bin /p friture-monitor.msix
+7. CI produces an unsigned MSIX. Before Store publication, register a fork-specific
+   package identity in Partner Center and replace Name and Publisher with the
+   registered values. For sideloading, sign with a certificate matching Publisher.
 
 References:
 https://docs.microsoft.com/en-us/windows/msix/packaging-tool/create-app-package
@@ -24,14 +24,14 @@ https://docs.microsoft.com/en-us/windows/msix/package/create-app-package-with-ma
     xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
     xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities">
     <Identity
-        Name="53504SilentGain.Friture"
+        Name="WillHirsch.FritureMonitor"
         Version="0.0.0.0"
-        Publisher="CN=74EE87F8-B2A0-400A-A66A-377F7F4E3BBE"
+        Publisher="CN=WillHirsch"
         ProcessorArchitecture="x64" />
     <Properties>
-        <DisplayName>Friture</DisplayName>
-        <PublisherDisplayName>Silent Gain</PublisherDisplayName>
-        <Description>Friture is an application to visualize and analyze live audio data in real-time.</Description>
+        <DisplayName>friture-monitor</DisplayName>
+        <PublisherDisplayName>Will Hirsch</PublisherDisplayName>
+        <Description>friture-monitor is an application to visualize and analyze live audio data in real-time.</Description>
         <!-- TODO: proper png assets with scales -->
         <Logo>icon_512x512.png</Logo>
     </Properties>
@@ -45,9 +45,9 @@ https://docs.microsoft.com/en-us/windows/msix/package/create-app-package-with-ma
         <rescap:Capability Name="runFullTrust"/>
     </Capabilities>
     <Applications>
-        <Application Id="Friture" Executable="friture.exe" EntryPoint="Windows.FullTrustApplication">
-            <uap:VisualElements DisplayName="Friture"
-                                Description="Friture is an application to visualize and analyze live audio data in real-time."
+        <Application Id="FritureMonitor" Executable="friture-monitor.exe" EntryPoint="Windows.FullTrustApplication">
+            <uap:VisualElements DisplayName="friture-monitor"
+                                Description="friture-monitor is an application to visualize and analyze live audio data in real-time."
                                 Square150x150Logo="icon_512x512.png"
                                 Square44x44Logo="icon_512x512.png"
                                 BackgroundColor="transparent" />

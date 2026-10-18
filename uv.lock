@@ -179,7 +179,7 @@ wheels = [
 ]
 
 [[package]]
-name = "friture"
+name = "friture-monitor"
 source = { editable = "." }
 dependencies = [
     { name = "docutils" },

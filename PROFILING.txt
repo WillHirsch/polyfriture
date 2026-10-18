@@ -8,14 +8,14 @@ scripts/gprof2dot.py -f pstats output.pstats -n 0.1 -e 0.02| dot -Tpng -o output
 
 Second option (cProfile and pstats)
 -----------------------------------
-./friture.py --python
+uv run friture-monitor --python
 
 Third option (cProfile, convert to kcachegrind)
 ------------------------------------------------------------------
 
 pip install pyprof2calltree
-python -m cProfile -o friture.cprof ./main.py
-pyprof2calltree -i .\friture.cprof
+python -m cProfile -o friture-monitor.cprof ./main.py
+pyprof2calltree -i .\friture-monitor.cprof
 kcachegrind/qcachegrind
 
 Fourth option (sysprof system-wide profiler on Linux)

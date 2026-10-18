@@ -7,10 +7,10 @@
 
 .. Build the doc using 'sphinx-build -b html doc doc/_build'
 
-Welcome to Friture documentation!
-===================================
+Welcome to friture-monitor documentation!
+========================================
 
-This document contains some notes to help you use Friture to perform various
+This document contains some notes to help you use friture-monitor to perform various
 tasks.
 
 .. Contents:
@@ -27,10 +27,10 @@ resolution that you need to precisely pinpoint the position of the feedbacks in 
 Instructions:
     1. Plug the output of your mixing console, or a measurement microphone,
        to the Left input channel
-    2. In Friture, add a new dock, and choose the FFT Spectrum in the widget list.
+    2. In friture-monitor, add a new dock, and choose the FFT Spectrum in the widget list.
     3. Raise the volume of the microphone of interest.
     4. As soon as you reach the feedback threshold and produce a Larsen effect,
-       hit the spacebar or click on "pause" in Friture to freeze the display, and lower
+       hit the spacebar or click on "pause" in friture-monitor to freeze the display, and lower
        the microphone volume to stop the Larsen effect (to protect the audio system and
        your ears !).
     5. The feedback will appear as a sharp peak in the FFT Spectrum. Pinpoint
@@ -48,9 +48,9 @@ octave (one third octave resolution) is the best tool that you can use.
 
 Instructions:
     1. Plug a measurement microphone to the Left input channel.
-    2. In Friture, add a new dock, and choose the Octave Spectrum in the widget list.
+    2. In friture-monitor, add a new dock, and choose the Octave Spectrum in the widget list.
     3. In the dock settings, ask for 3 bands per octave.
-    4. Play pink noise to your sound system (using Friture pink noise generator
+    4. Play pink noise to your sound system (using friture-monitor pink noise generator
        if you will).
     5. The ideal spectrum should be flat. Use an equalizer to raise the dips and
        lower the peaks in the spectrum.
@@ -68,10 +68,10 @@ Instructions:
     1. Plug the reference signal (the output of the mixing console) to the Left
        channel.
     2. Plug the delayed channel (the measurement microphone) to the Right channel.
-    3. Enable the two-channel mode in Friture settings, and make sure that the
+    3. Enable the two-channel mode in friture-monitor settings, and make sure that the
        First channel is the Left channel, and the Second channel is the Right channel.
     4. Add a new dock, and choose the Delay Estimator in the widget list.
-    5. Play a Burst signal in your system (using Friture burst generator if you
+    5. Play a Burst signal in your system (using friture-monitor burst generator if you
        will), with a period of one second.
     6. The delay will be displayed in milliseconds and, equivalently, in meters.
        If a meaningless delay is displayed, a low confidence is probably

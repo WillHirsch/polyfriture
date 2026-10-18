@@ -5,13 +5,14 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "friture"
-description = "Real-time visualization of live audio data"
+name = "friture-monitor"
+description = "A Friture fork for real-time audio monitoring and visualization"
 license = {file = "COPYING.txt"}
 readme = "README.rst"
 authors = [
     {name = "Timothée Lecomte", email = "contact@friture.org"},
 ]
+maintainers = [{name = "Will Hirsch"}]
 keywords = ["audio", "spectrum", "spectrogram"]
 classifiers=[
     "Programming Language :: Python",
@@ -39,12 +40,13 @@ dependencies = [
 ]
 
 [project.scripts]
-friture = "friture.analyzer:main"
+friture-monitor = "friture_monitor.analyzer:main"
 
 [project.urls]
-Homepage = "http://www.friture.org"
-Repository = "https://github.com/tlecomte/friture"
-Issues = "https://github.com/tlecomte/friture/issues"
+Homepage = "https://github.com/WillHirsch/friture-monitor"
+Repository = "https://github.com/WillHirsch/friture-monitor"
+Issues = "https://github.com/WillHirsch/friture-monitor/issues"
+Upstream = "https://github.com/tlecomte/friture"
 
 [tool.uv]
 required-environments = [
@@ -61,21 +63,21 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["friture/test"]
+testpaths = ["friture_monitor/test"]
 python_files = ["test_*.py"]
 
 [tool.setuptools]
 packages=[
-    "friture",
-    "friture.data",
-    "friture.playback",
-    "friture.plotting",
-    "friture.generators",
-    "friture.signal",
+    "friture_monitor",
+    "friture_monitor.data",
+    "friture_monitor.playback",
+    "friture_monitor.plotting",
+    "friture_monitor.generators",
+    "friture_monitor.signal",
 ]
 
 [tool.setuptools.data-files]
-"share/applications" = ["appimage/friture.desktop"]
+"share/applications" = ["appimage/friture-monitor.desktop"]
 
 [tool.setuptools.dynamic]
-version = {attr = "friture.__version__"}
+version = {attr = "friture_monitor.__version__"}
