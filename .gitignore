@@ -25,7 +25,7 @@ buildenv/*
 venv/*
 .venv/
 tools/*
-friture.egg-info
+*.egg-info/
 .eggs/
 *.appx
 *.msix

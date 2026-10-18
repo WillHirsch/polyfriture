@@ -1,12 +1,12 @@
-# Installing Friture
+# Installing Polyfriture
 
 ## Binary releases
 
-Get the latest binary releases for Windows, macOS and Linux on the [Releases](https://github.com/tlecomte/friture/releases) page.
+Get the latest binary releases for Windows, macOS and Linux on the [Releases](https://github.com/WillHirsch/polyfriture/releases) page.
 
-## Running Friture from source on Linux
+## Running Polyfriture from source on Linux
 
-The following steps can be used to prepare a development environment for Friture on Ubuntu.
+The following steps can be used to prepare a development environment for Polyfriture on Ubuntu.
 
 Prerequisite: a 64 bits Linux installation (PyQt6 wheels for Linux are only available for 64 bits).
 
@@ -18,7 +18,7 @@ sudo apt-get update
 sudo apt-get install -y git
 ```
 
-2. Install `portaudio` (used for audio IO in Friture)
+2. Install `portaudio` (used for audio IO in Polyfriture)
 ```
 sudo apt-get install -y libportaudio2
 ```
@@ -30,8 +30,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 4. Clone the repository
 ```
-git clone https://github.com/tlecomte/friture.git
-cd friture
+git clone https://github.com/WillHirsch/polyfriture.git
+cd polyfriture
 ```
 
 5. Optional: switch to a specific branch
@@ -40,19 +40,19 @@ git fetch
 git checkout origin/<branchName>
 ```
 
-6. Create a virtual environment and install Friture dependencies (PyQt6, etc.)
+6. Create a virtual environment and install Polyfriture dependencies (PyQt6, etc.)
 ```
 uv sync
 ```
 
-7. Run Friture
+7. Run Polyfriture
 ```
-uv run python main.py
+uv run polyfriture
 ```
 
-## Running Friture from source on Windows
+## Running Polyfriture from source on Windows
 
-The following steps can be used to prepare a development environment for Friture on Windows.
+The following steps can be used to prepare a development environment for Polyfriture on Windows.
 
 1. Clone this repo
 
@@ -75,10 +75,10 @@ uv sync
 
 `uv sync` handles everything: it creates the virtual environment and installs all dependencies.
 
-5. Run Friture
+5. Run Polyfriture
 
 ```
-uv run python main.py
+uv run polyfriture
 ```
 
 ## Dependencies
@@ -90,8 +90,8 @@ See [pyproject.toml](pyproject.toml)
 If `settings.ui` or `resource.qrc` are changed, the corresponding python files need to be rebuilt:
 
 ```
-uv run pyuic6 ui/settings.ui -o friture/ui_settings.py
-uv run pyrcc6 resources/friture.qrc -o friture/friture_rc.py
+uv run pyuic6 ui/settings.ui -o polyfriture/ui_settings.py
+uv run pyrcc6 resources/friture.qrc -o polyfriture/friture_rc.py
 ```
 
 ## Filters parameters
@@ -101,7 +101,7 @@ The filters parameters are precomputed in files called `generated_filters.py`
 FFT frequency responses). To rebuild these files, run:
 
 ```
-uv run python friture/filter_design.py
+uv run python polyfriture/filter_design.py
 ```
 
 Note: `filter_design.py` requires `scipy` to be installed.

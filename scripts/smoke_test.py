@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Cross-platform smoke-test harness for the frozen Friture packages.
+# Cross-platform smoke-test harness for the frozen polyfriture packages.
 #
 # It launches the packaged binary headless (the offscreen Qt platform, so no
 # display server is required) and verifies that the bundle is intact: the app
@@ -23,12 +23,12 @@ import signal
 import platform
 import subprocess
 
-import platformdirs
+from polyfriture.application import APPLICATION_DISPLAY_NAME, LOG_FILENAME, log_directory
 
 # Best-effort: used to build the expected startup banner.
 try:
-    import friture
-    VERSION = friture.__version__
+    import polyfriture
+    VERSION = polyfriture.__version__
 except Exception:
     VERSION = None
 
@@ -77,7 +77,8 @@ FULL_INIT_LINE = "Init finished, entering the main loop"
 
 
 def startup_banner():
-    return "Friture %s starting on %s (%s)" % (
+    return "%s %s starting on %s (%s)" % (
+        APPLICATION_DISPLAY_NAME,
         VERSION if VERSION is not None else "???",
         platform.system(),
         sys.platform,
@@ -85,8 +86,7 @@ def startup_banner():
 
 
 def log_file_path():
-    log_dir = platformdirs.user_log_dir("Friture", "")
-    return os.path.join(log_dir, "friture.log.txt")
+    return os.path.join(log_directory(), LOG_FILENAME)
 
 
 def main():
@@ -94,7 +94,7 @@ def main():
         print("usage: smoke_test.py <binary> [app args...]")
         return 2
 
-    binary = sys.argv[1]
+    binary = os.path.abspath(sys.argv[1])
     extra_args = sys.argv[2:]
     banner = startup_banner()
     log_path = log_file_path()

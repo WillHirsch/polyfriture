@@ -41,8 +41,8 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = 'Friture'
-copyright = '2012, Timothée Lecomte'
+project = 'Polyfriture'
+copyright = '2012, Timothée Lecomte; 2026, Will Hirsch'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -165,7 +165,7 @@ html_static_path = ['_static']
 #html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'Frituredoc'
+htmlhelp_basename = 'polyfriture-doc'
 
 
 # -- Options for LaTeX output --------------------------------------------------
@@ -179,7 +179,7 @@ htmlhelp_basename = 'Frituredoc'
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
-  ('index', 'Friture.tex', 'Friture Documentation',
+  ('index', 'polyfriture.tex', 'Polyfriture Documentation',
    'Timothée Lecomte', 'manual'),
 ]
 
@@ -212,6 +212,6 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'friture', 'Friture Documentation',
+    ('index', 'polyfriture', 'Polyfriture Documentation',
      ['Timothée Lecomte'], 1)
 ]

@@ -5,13 +5,15 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "friture"
+name = "polyfriture"
 description = "Real-time visualization of live audio data"
 license = {file = "COPYING.txt"}
 readme = "README.rst"
 authors = [
     {name = "Timothée Lecomte", email = "contact@friture.org"},
+    {name = "Will Hirsch", email = "contact@willh.uk"},
 ]
+maintainers = [{name = "Will Hirsch"}]
 keywords = ["audio", "spectrum", "spectrogram"]
 classifiers=[
     "Programming Language :: Python",
@@ -39,12 +41,13 @@ dependencies = [
 ]
 
 [project.scripts]
-friture = "friture.analyzer:main"
+polyfriture = "polyfriture.analyzer:main"
 
 [project.urls]
-Homepage = "http://www.friture.org"
-Repository = "https://github.com/tlecomte/friture"
-Issues = "https://github.com/tlecomte/friture/issues"
+Homepage = "https://github.com/WillHirsch/polyfriture"
+Repository = "https://github.com/WillHirsch/polyfriture"
+Issues = "https://github.com/WillHirsch/polyfriture/issues"
+Upstream = "https://github.com/tlecomte/friture"
 
 [tool.uv]
 required-environments = [
@@ -61,21 +64,21 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["friture/test"]
+testpaths = ["polyfriture/test"]
 python_files = ["test_*.py"]
 
 [tool.setuptools]
 packages=[
-    "friture",
-    "friture.data",
-    "friture.playback",
-    "friture.plotting",
-    "friture.generators",
-    "friture.signal",
+    "polyfriture",
+    "polyfriture.data",
+    "polyfriture.playback",
+    "polyfriture.plotting",
+    "polyfriture.generators",
+    "polyfriture.signal",
 ]
 
 [tool.setuptools.data-files]
-"share/applications" = ["appimage/friture.desktop"]
+"share/applications" = ["appimage/polyfriture.desktop"]
 
 [tool.setuptools.dynamic]
-version = {attr = "friture.__version__"}
+version = {attr = "polyfriture.__version__"}

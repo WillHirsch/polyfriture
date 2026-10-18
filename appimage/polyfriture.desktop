@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Polyfriture
+Comment=Real-time visualization of live audio data
+Icon=polyfriture
+Exec=polyfriture
+StartupWMClass=polyfriture
+Terminal=false
+Categories=AudioVideo;Audio;
+Keywords=audio;spectrum;spectrogram;

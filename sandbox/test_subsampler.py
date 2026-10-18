@@ -1,9 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from friture import generated_filters
-from friture.audiobackend import SAMPLING_RATE
-from friture.delay_estimator import subsampler, subsampler_filtic
+from polyfriture import generated_filters
+from polyfriture.audiobackend import SAMPLING_RATE
+from polyfriture.delay_estimator import subsampler, subsampler_filtic
 
 Ns = int(1e4)
 #y = np.random.rand(Ns)

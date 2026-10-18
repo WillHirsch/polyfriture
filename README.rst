@@ -1,18 +1,24 @@
-=======
-Friture
-=======
+===========
+Polyfriture
+===========
 
-.. image:: https://github.com/tlecomte/friture/workflows/build/badge.svg
-    :target: https://github.com/tlecomte/friture/actions
+.. image:: https://github.com/WillHirsch/polyfriture/actions/workflows/build.yml/badge.svg
+    :target: https://github.com/WillHirsch/polyfriture/actions
 
-**Friture** is an application to visualize and analyze live audio data in real-time.
+**Polyfriture** is a fork of `Friture`_, an application to visualize and analyze live audio data in real-time.
+Its goal is to more effectively support monitoring multiple channels from one audio device.
 
-Friture displays audio data in several widgets, such as a scope, a spectrum analyzer, or a rolling 2D spectrogram.
+Polyfriture displays audio data in several widgets, such as a scope, a spectrum analyzer, or a rolling 2D spectrogram.
 
 This program can be useful to analyze and equalize the audio response of a hall, or for educational purposes, etc.
 
-The name *Friture* is a french word for *frying*, also used for *noise* in a sound.
+Friture was created by Timothée Lecomte and contributors.
+The name *Friture* is a French word for *frying*, also used for *noise* in a sound.
 
-See the `project homepage`_ for screenshots and more information.
+Polyfriture is distributed under GNU GPLv3; see COPYING.txt. Modified from Friture by Will Hirsch in 2026.
 
-.. _`project homepage`: http://friture.org
+See the `upstream project homepage`_ for screenshots and information about Friture.
+
+.. _Friture: https://github.com/tlecomte/friture
+.. _`GitHub issues`: https://github.com/WillHirsch/polyfriture/issues
+.. _`upstream project homepage`: http://friture.org

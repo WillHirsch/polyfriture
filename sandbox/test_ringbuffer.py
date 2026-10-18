@@ -1,5 +1,5 @@
 import numpy as np
-from friture.ringbuffer import RingBuffer
+from polyfriture.ringbuffer import RingBuffer
 import matplotlib.pyplot as plt
 
 Ns = int(1e4)

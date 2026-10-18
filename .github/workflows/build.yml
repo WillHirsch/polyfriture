@@ -42,21 +42,21 @@ jobs:
       run: ./.github/workflows/install-windows.ps1
 
     - name: Verify app launches (smoke test)
-      # Launch the frozen friture.exe headless (offscreen Qt) and assert it
+      # Launch the frozen polyfriture.exe headless (offscreen Qt) and assert it
       # reaches full init. The MSIX itself is not installed here (it is
       # unsigned; the Store signs on ingestion) -- we validate the same frozen
       # binary the MSIX wraps.
       shell: bash
-      run: uv run python scripts/smoke_test.py dist/friture/friture.exe --no-splash
+      run: uv run python scripts/smoke_test.py dist/polyfriture/polyfriture.exe --no-splash
 
-    - name: Capture Friture log
+    - name: Capture Polyfriture log
       if: always()
       shell: bash
       run: |
         uv run python - <<'PY'
         import os, shutil, platformdirs
-        src = os.path.join(platformdirs.user_log_dir("Friture", ""), "friture.log.txt")
-        dst = "friture-smoke.log"
+        src = os.path.join(platformdirs.user_log_dir("polyfriture", ""), "polyfriture.log.txt")
+        dst = "polyfriture-smoke.log"
         if os.path.exists(src):
             shutil.copy2(src, dst)
         else:
@@ -64,47 +64,47 @@ jobs:
                 f.write("log not found: " + src)
         PY
 
-    - name: Upload friture smoke-test log
+    - name: Upload Polyfriture smoke-test log
       if: always()
       uses: actions/upload-artifact@v7
       with:
-        name: friture-smoke-log-windows
-        path: friture-smoke.log
+        name: polyfriture-smoke-log-windows
+        path: polyfriture-smoke.log
         if-no-files-found: warn
 
-    - name: Upload friture msix
+    - name: Upload Polyfriture msix
       uses: actions/upload-artifact@v7
       with:
-        name: friture-msix
-        path: dist/friture-*.msix
+        name: polyfriture-msix
+        path: dist/polyfriture-*.msix
         if-no-files-found: error
 
-    - name: Upload friture msi
+    - name: Upload Polyfriture msi
       uses: actions/upload-artifact@v7
       with:
-        name: friture-msi
-        path: dist/friture-*.msi
+        name: polyfriture-msi
+        path: dist/polyfriture-*.msi
         if-no-files-found: error
 
-    - name: Upload friture zip
+    - name: Upload Polyfriture zip
       uses: actions/upload-artifact@v7
       with:
-        name: friture-zip
-        path: dist/friture.zip
+        name: polyfriture-zip
+        path: dist/polyfriture.zip
         if-no-files-found: error
 
     - name: Upload import xref
       uses: actions/upload-artifact@v7
       with:
-        name: friture-import-xref
-        path: build/friture/xref-friture.html
+        name: polyfriture-import-xref
+        path: build/polyfriture/xref-polyfriture.html
         if-no-files-found: error
 
     - name: Upload import graph
       uses: actions/upload-artifact@v7
       with:
-        name: friture-import-graph
-        path: build/friture/graph-friture.dot
+        name: polyfriture-import-graph
+        path: build/polyfriture/graph-polyfriture.dot
         if-no-files-found: error
 
   build-linux:
@@ -133,17 +133,17 @@ jobs:
 
     - name: Verify AppImage launches (smoke test)
       run: |
-        ./friture-*.AppImage --appimage-extract
+        ./polyfriture-*.AppImage --appimage-extract
         uv run python scripts/smoke_test.py ./squashfs-root/AppRun --no-splash
 
-    - name: Capture Friture log
+    - name: Capture Polyfriture log
       if: always()
       shell: bash
       run: |
         uv run python - <<'PY'
         import os, shutil, platformdirs
-        src = os.path.join(platformdirs.user_log_dir("Friture", ""), "friture.log.txt")
-        dst = "friture-smoke.log"
+        src = os.path.join(platformdirs.user_log_dir("polyfriture", ""), "polyfriture.log.txt")
+        dst = "polyfriture-smoke.log"
         if os.path.exists(src):
             shutil.copy2(src, dst)
         else:
@@ -155,17 +155,17 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v7
       with:
-        name: friture-smoke-log-linux
-        path: friture-smoke.log
+        name: polyfriture-smoke-log-linux
+        path: polyfriture-smoke.log
         if-no-files-found: warn
 
     - name: Upload appImage
       uses: actions/upload-artifact@v7
       with:
-        name: friture-appImage
+        name: polyfriture-appImage
         path: |
-          friture*.AppImage
-          friture*.AppImage.zsync
+          polyfriture*.AppImage
+          polyfriture*.AppImage.zsync
         if-no-files-found: error
 
   build-macos:
@@ -194,16 +194,16 @@ jobs:
 
     - name: Verify app launches (smoke test)
       shell: bash
-      run: uv run python scripts/smoke_test.py dist/friture.app/Contents/MacOS/friture --no-splash
+      run: uv run python scripts/smoke_test.py dist/polyfriture.app/Contents/MacOS/polyfriture --no-splash
 
-    - name: Capture Friture log
+    - name: Capture Polyfriture log
       if: always()
       shell: bash
       run: |
         uv run python - <<'PY'
         import os, shutil, platformdirs
-        src = os.path.join(platformdirs.user_log_dir("Friture", ""), "friture.log.txt")
-        dst = "friture-smoke.log"
+        src = os.path.join(platformdirs.user_log_dir("polyfriture", ""), "polyfriture.log.txt")
+        dst = "polyfriture-smoke.log"
         if os.path.exists(src):
             shutil.copy2(src, dst)
         else:
@@ -211,19 +211,19 @@ jobs:
                 f.write("log not found: " + src)
         PY
 
-    - name: Upload friture smoke-test log
+    - name: Upload Polyfriture smoke-test log
       if: always()
       uses: actions/upload-artifact@v7
       with:
-        name: friture-smoke-log-macos
-        path: friture-smoke.log
+        name: polyfriture-smoke-log-macos
+        path: polyfriture-smoke.log
         if-no-files-found: warn
 
     - name: Upload dmg
       uses: actions/upload-artifact@v7
       with:
-        name: friture-dmg
-        path: friture*.dmg
+        name: polyfriture-dmg
+        path: polyfriture*.dmg
         if-no-files-found: error
 
   release:
@@ -248,10 +248,10 @@ jobs:
           prerelease: false
           fail_on_unmatched_files: true
           files: |
-            **/friture*.msi
-            **/friture*.msix
-            **/friture*.dmg
-            **/friture*.AppImage
-            **/friture*.AppImage.zsync
+            **/polyfriture*.msi
+            **/polyfriture*.msix
+            **/polyfriture*.dmg
+            **/polyfriture*.AppImage
+            **/polyfriture*.AppImage.zsync
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
