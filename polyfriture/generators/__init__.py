@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 # Copyright (C) 2015 Timothée Lecomte
-# Copyright (C) 2026 Will Hirsch
 
 # This file is part of Friture.
 #

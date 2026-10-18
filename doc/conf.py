@@ -1,8 +1,4 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2026 Will Hirsch
-# SPDX-License-Identifier: GPL-3.0-only
-# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
-
 #
 # Friture documentation build configuration file, created by
 # sphinx-quickstart on Thu May 17 16:53:22 2012.

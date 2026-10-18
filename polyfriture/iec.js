@@ -1,7 +1,3 @@
-// Copyright (C) 2026 Will Hirsch
-// SPDX-License-Identifier: GPL-3.0-only
-// Part of Polyfriture. See COPYING.txt for the GNU General Public License.
-
 function dB_to_IEC(dB) {
     if (dB < -70.0) {
         return 0.0;

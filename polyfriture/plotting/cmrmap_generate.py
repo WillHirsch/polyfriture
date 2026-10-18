@@ -4,7 +4,6 @@
 # Copyright (c) 2015, Timothée Lecomte
 # Copyright (c) 2012, Christopher Hummersone
 # Copyright (c) 2002, Carey Rappaport
-# Copyright (C) 2026 Will Hirsch
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -87,10 +86,6 @@ def generate_cmrmap():
     cmap = compute_colors(256)
 
     out = """\
-# Copyright (C) 2026 Will Hirsch
-# SPDX-License-Identifier: GPL-3.0-only
-# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
-
 # CMRMAP generated from cmrmap_generate.py
 
 #   Returns a colour map CMAP (varying black -

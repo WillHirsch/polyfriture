@@ -1,7 +1,3 @@
-# Copyright (C) 2026 Will Hirsch
-# SPDX-License-Identifier: GPL-3.0-only
-# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
-
 from PyQt6 import QtCore
 from PyQt6.QtCore import QObject, pyqtProperty, pyqtSlot  # type: ignore
 

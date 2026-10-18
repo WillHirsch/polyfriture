@@ -1,8 +1,4 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2026 Will Hirsch
-# SPDX-License-Identifier: GPL-3.0-only
-# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
-
 import os
 from numpy import pi, exp, arange, cos, sin, sqrt, zeros, ones, log, arange, set_printoptions
 # the three following lines are a workaround for a bug with scipy and py2exe
@@ -197,10 +193,6 @@ def generate_filters_params():
         params['%d' % bands_per_octave] = [boct, aoct, fi.tolist(), flow.tolist(), fhigh.tolist()]
 
     out = """\
-# Copyright (C) 2026 Will Hirsch
-# SPDX-License-Identifier: GPL-3.0-only
-# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
-
 # Filters parameters generated from filter_design.py
 
 import json

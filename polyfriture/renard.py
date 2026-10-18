@@ -1,7 +1,3 @@
-# Copyright (C) 2026 Will Hirsch
-# SPDX-License-Identifier: GPL-3.0-only
-# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
-
 # Renard's numbers, or preferred numbers
 # used for frequency display
 # R5 for octave analyzer

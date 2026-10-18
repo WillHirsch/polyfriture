@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 # Copyright (C) 2024 Celeste Sinéad, Timothée Lecomte
-# Copyright (C) 2026 Will Hirsch
 
 # This file is part of Friture.
 #

@@ -1,8 +1,4 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2026 Will Hirsch
-# SPDX-License-Identifier: GPL-3.0-only
-# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
-
 from numpy import arange, sqrt, zeros, array
 import numpy as np
 from polyfriture.signal.lfilter import lfilter_float64_1D

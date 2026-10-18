@@ -1,7 +1,3 @@
-# Copyright (C) 2026 Will Hirsch
-# SPDX-License-Identifier: GPL-3.0-only
-# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
-
 import numpy as np
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtProperty # type: ignore  # type: ignore
 from PyQt6.QtGui import QColor

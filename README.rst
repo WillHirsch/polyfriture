@@ -1,7 +1,3 @@
-.. Copyright (C) 2026 Will Hirsch
-   SPDX-License-Identifier: GPL-3.0-only
-   Part of Polyfriture. See COPYING.txt for the GNU General Public License.
-
 ===========
 Polyfriture
 ===========
@@ -29,8 +25,20 @@ See INSTALL.md for platform-specific setup. The Python package is named
 application identity. Upstream settings import is a subsequent roadmap item.
 
 Friture was created by Timothée Lecomte and contributors. The name *Friture*
-is a French word for *frying*, also used for *noise* in a sound. This fork
-retains the upstream copyright notices and GPLv3 license; see COPYING.txt.
+is a French word for *frying*, also used for *noise* in a sound.
+
+License and fork modifications
+------------------------------
+
+Polyfriture is distributed under the GNU General Public License, version 3
+(GPLv3); see COPYING.txt for the full license. Existing upstream and third-party
+copyright, license, and warranty notices are retained.
+
+Copyright (C) 2026 Will Hirsch for the Polyfriture modifications.
+
+On 18 October 2026, Will Hirsch modified Friture to establish Polyfriture's
+application identity, Python package, settings and log namespaces, packaging,
+and documentation.
 
 See the `upstream project homepage`_ for screenshots and information about Friture.
 

@@ -1,8 +1,4 @@
 # -*- mode: python -*-
-# Copyright (C) 2026 Will Hirsch
-# SPDX-License-Identifier: GPL-3.0-only
-# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
-
 
 import os
 import platform
@@ -71,7 +67,7 @@ if platform.system() == "Windows":
 a = Analysis(['main.py'],
              pathex=pathex,
              binaries=[],
-             datas= [('polyfriture/*.qml', '.' ), ('polyfriture/playback/*.qml', 'playback' ), ('polyfriture/generators/*.qml', 'generators' ), ('polyfriture/*.js', '.' ), ('polyfriture/data/*.npz', 'data' ), ('polyfriture/data/*.license', 'data' )],
+             datas= [('polyfriture/*.qml', '.' ), ('polyfriture/playback/*.qml', 'playback' ), ('polyfriture/generators/*.qml', 'generators' ), ('polyfriture/*.js', '.' ), ('polyfriture/data/*.npz', 'data' )],
              hiddenimports=[],
              hookspath=["installer/pyinstaller-hooks"], # our custom hooks for python-sounddevice
              runtime_hooks=[],
