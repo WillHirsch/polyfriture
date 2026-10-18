@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
 
+# Copyright (C) 2026 Will Hirsch
+# SPDX-License-Identifier: GPL-3.0-only
+# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
+
 from matplotlib import pyplot as plt
 from scipy.signal.filter_design import iirdesign, tf2zpk
 from scipy.signal.signaltools import lfilter, lfiltic
@@ -7,7 +11,7 @@ import numpy as np
 from numpy.fft import fft, fftshift, fftfreq
 import time
 
-from friture_monitor.signal.lfilter import lfilter_float64_1D
+from polyfriture.signal.lfilter import lfilter_float64_1D
 
 def pure_lfilter_float64_1D(b, a, x, zi):
     assert len(b.shape) == 1, "only 1D filters are allowed"

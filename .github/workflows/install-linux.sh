@@ -1,4 +1,8 @@
 #!/bin/bash
+# Copyright (C) 2026 Will Hirsch
+# SPDX-License-Identifier: GPL-3.0-only
+# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
+
 
 set -x
 
@@ -28,10 +32,10 @@ sudo apt-get install -y libjack-dev
 
 # Provide a virtual audio device so the headless smoke test (and the frozen app)
 # can fully start: PortAudio needs a default output device to enumerate, and
-# friture-monitor's audio backend raises (hanging in an error dialog) otherwise.
+# polyfriture's audio backend raises (hanging in an error dialog) otherwise.
 sudo apt-get install -y pulseaudio pulseaudio-utils libasound2-plugins
 pulseaudio --start --exit-idle-time=-1 2>/dev/null || true
-pactl load-module module-null-sink sink_name=friture-monitor_smoke sink_properties=device.description="friture-monitor+smoke+test" 2>/dev/null || true
+pactl load-module module-null-sink sink_name=polyfriture_smoke sink_properties=device.description="Polyfriture+smoke+test" 2>/dev/null || true
 
 # build PortAudio 19.7.0 from scratch (required for Jack fixes on distributions using PipeWire)
 wget https://github.com/PortAudio/portaudio/archive/refs/tags/v19.7.0.tar.gz
@@ -43,10 +47,10 @@ make install
 ls -laR portaudio-install
 cd ..
 
-uv run pyinstaller friture-monitor.spec -y --log-level=DEBUG
+uv run pyinstaller polyfriture.spec -y --log-level=DEBUG
 
 # ---- AppDir assembly ----
-# friture-monitor is frozen with PyInstaller, so dist/friture-monitor/ is already a self-contained
+# polyfriture is frozen with PyInstaller, so dist/polyfriture/ is already a self-contained
 # bundle (Python + Qt6 + PortAudio). We lay it into a standard AppDir and let
 # appimagetool turn it into an AppImage (+ .zsync for AppImageUpdate).
 
@@ -60,7 +64,7 @@ rm -rf "$APPDIR"
 mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/lib/x86_64-linux-gnu"
 
 # drop the PyInstaller bundle into usr/bin/ (preserves the bundled libs' layout)
-cp -R dist/friture-monitor/* "$APPDIR/usr/bin/"
+cp -R dist/polyfriture/* "$APPDIR/usr/bin/"
 
 # bundle the source-built PortAudio so sounddevice's ctypes.find_library() resolves it
 cp portaudio-19.7.0/portaudio-install/lib/libportaudio.so* $APPDIR/usr/lib/x86_64-linux-gnu/
@@ -82,7 +86,7 @@ ldd portaudio-19.7.0/portaudio-install/lib/libportaudio.so.2 2>/dev/null \
 # self-contained on a minimal host.
 gather_runtime_libs() {
   local libdir="$1"
-  local -a queue=("$APPDIR/usr/bin/friture-monitor")
+  local -a queue=("$APPDIR/usr/bin/polyfriture")
   local -A seen=()
   # seed with every shared object the freeze shipped
   while IFS= read -r -d '' so; do queue+=("$so"); done \
@@ -117,8 +121,8 @@ gather_runtime_libs() {
 gather_runtime_libs "$APPDIR/usr/lib/x86_64-linux-gnu"
 
 # desktop entry + icon
-cp appimage/friture-monitor.desktop $APPDIR/friture-monitor.desktop
-cp resources/images-src/window-icon.svg $APPDIR/friture-monitor.svg
+cp appimage/polyfriture.desktop $APPDIR/polyfriture.desktop
+cp resources/images-src/window-icon.svg $APPDIR/polyfriture.svg
 
 # AppRun shim: expose the bundled PortAudio to the dynamic loader.
 # (Only the PortAudio dir is added to LD_LIBRARY_PATH; the frozen binary finds
@@ -127,7 +131,7 @@ cat > $APPDIR/AppRun <<'EOF'
 #!/bin/sh
 HERE="$(dirname "$(readlink -f "${0}")")"
 export LD_LIBRARY_PATH="$HERE/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
-exec "$HERE/usr/bin/friture-monitor" "$@"
+exec "$HERE/usr/bin/polyfriture" "$@"
 EOF
 chmod +x $APPDIR/AppRun
 
@@ -138,7 +142,7 @@ chmod +x $APPDIR/AppRun
 wget -q -O appimagetool https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
 chmod a+x appimagetool
 
-export ARTIFACT_FILENAME=friture-monitor-$(uv run python -c 'import friture_monitor; print(friture_monitor.__version__)')-$(date +'%Y%m%d').AppImage
+export ARTIFACT_FILENAME=polyfriture-$(uv run python -c 'import polyfriture; print(polyfriture.__version__)')-$(date +'%Y%m%d').AppImage
 echo $ARTIFACT_FILENAME
 
 # update information lets AppImageUpdate do binary delta updates.
@@ -147,7 +151,7 @@ echo $ARTIFACT_FILENAME
 # release asset automatically; for non-release builds we embed a no-update
 # placeholder so the .zsync file is still produced for CI inspection.
 if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-  UPDATE_INFO="gh-releases-zsync|WillHirsch|friture-monitor|latest|friture-monitor*.AppImage.zsync"
+  UPDATE_INFO="gh-releases-zsync|WillHirsch|polyfriture|latest|polyfriture*.AppImage.zsync"
 else
   UPDATE_INFO="zsync|https://example.invalid/never"
 fi
@@ -156,7 +160,7 @@ fi
 ls -la $ARTIFACT_FILENAME $ARTIFACT_FILENAME.zsync 2>/dev/null
 du -hs $ARTIFACT_FILENAME
 
-# sanity check: a sane friture-monitor AppImage is well under 200 MB.
+# sanity check: a sane polyfriture AppImage is well under 200 MB.
 # A much larger result usually means a packaging step duplicated the Qt/Python
 # libs, so fail loudly rather than ship a bloated artifact.
 SIZE_BYTES=$(stat -c%s "$ARTIFACT_FILENAME")

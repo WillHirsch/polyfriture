@@ -1,8 +1,13 @@
+# Copyright (C) 2026 Will Hirsch
+# SPDX-License-Identifier: GPL-3.0-only
+# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
+
 include COPYING.txt
 include INSTALL.md
 include PROFILING.txt
 include README.rst
 include main.py
-recursive-include friture_monitor *.qml
-recursive-include friture_monitor *.js
-recursive-include friture_monitor/data *.npz
+recursive-include polyfriture *.qml
+recursive-include polyfriture *.js
+recursive-include polyfriture/data *.npz
+recursive-include polyfriture/data *.license

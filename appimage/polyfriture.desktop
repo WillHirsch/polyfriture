@@ -1,0 +1,14 @@
+# Copyright (C) 2026 Will Hirsch
+# SPDX-License-Identifier: GPL-3.0-only
+# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
+
+[Desktop Entry]
+Type=Application
+Name=Polyfriture
+Comment=Real-time visualization of live audio data
+Icon=polyfriture
+Exec=polyfriture
+StartupWMClass=polyfriture
+Terminal=false
+Categories=AudioVideo;Audio;
+Keywords=audio;spectrum;spectrogram;

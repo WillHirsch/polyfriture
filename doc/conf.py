@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+# Copyright (C) 2026 Will Hirsch
+# SPDX-License-Identifier: GPL-3.0-only
+# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
+
 #
 # Friture documentation build configuration file, created by
 # sphinx-quickstart on Thu May 17 16:53:22 2012.
@@ -41,8 +45,8 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = 'friture-monitor'
-copyright = '2012, Timothée Lecomte'
+project = 'Polyfriture'
+copyright = '2012, Timothée Lecomte; 2026, Will Hirsch'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -165,7 +169,7 @@ html_static_path = ['_static']
 #html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'friture-monitor-doc'
+htmlhelp_basename = 'polyfriture-doc'
 
 
 # -- Options for LaTeX output --------------------------------------------------
@@ -179,7 +183,7 @@ htmlhelp_basename = 'friture-monitor-doc'
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
-  ('index', 'friture-monitor.tex', 'friture-monitor Documentation',
+  ('index', 'polyfriture.tex', 'Polyfriture Documentation',
    'Timothée Lecomte', 'manual'),
 ]
 
@@ -212,6 +216,6 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'friture-monitor', 'friture-monitor Documentation',
+    ('index', 'polyfriture', 'Polyfriture Documentation',
      ['Timothée Lecomte'], 1)
 ]

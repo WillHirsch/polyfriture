@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # Copyright (C) 2009 Timothée Lecomte
+# Copyright (C) 2026 Will Hirsch
 
 # This file is part of Friture.
 #
@@ -21,9 +22,9 @@ from numpy import argmax
 import numpy
 import numpy as np
 from numpy.fft import rfft, irfft, fft, ifft
-from friture_monitor import generated_filters
-from friture_monitor.delay_estimator import DEFAULT_DELAYRANGE
-from friture_monitor.signal.decimate import decimate_multiple, decimate_multiple_filtic
+from polyfriture import generated_filters
+from polyfriture.delay_estimator import DEFAULT_DELAYRANGE
+from polyfriture.signal.decimate import decimate_multiple, decimate_multiple_filtic
 from scipy.io import wavfile
 import matplotlib.pyplot as plt
 

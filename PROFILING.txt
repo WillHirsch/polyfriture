@@ -1,3 +1,7 @@
+.. Copyright (C) 2026 Will Hirsch
+   SPDX-License-Identifier: GPL-3.0-only
+   Part of Polyfriture. See COPYING.txt for the GNU General Public License.
+
 Some details about profiling possibilities
 ==========================================
 
@@ -8,14 +12,14 @@ scripts/gprof2dot.py -f pstats output.pstats -n 0.1 -e 0.02| dot -Tpng -o output
 
 Second option (cProfile and pstats)
 -----------------------------------
-uv run friture-monitor --python
+uv run polyfriture --python
 
 Third option (cProfile, convert to kcachegrind)
 ------------------------------------------------------------------
 
 pip install pyprof2calltree
-python -m cProfile -o friture-monitor.cprof ./main.py
-pyprof2calltree -i .\friture-monitor.cprof
+python -m cProfile -o polyfriture.cprof ./main.py
+pyprof2calltree -i .\polyfriture.cprof
 kcachegrind/qcachegrind
 
 Fourth option (sysprof system-wide profiler on Linux)

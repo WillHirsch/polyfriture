@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Will Hirsch
+# SPDX-License-Identifier: GPL-3.0-only
+# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
+
 version = 1
 revision = 3
 requires-python = ">=3.11"
@@ -179,7 +183,7 @@ wheels = [
 ]
 
 [[package]]
-name = "friture-monitor"
+name = "polyfriture"
 source = { editable = "." }
 dependencies = [
     { name = "docutils" },

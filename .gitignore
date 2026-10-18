@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Will Hirsch
+# SPDX-License-Identifier: GPL-3.0-only
+# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
+
 *~
 *.pyc
 *.so
@@ -25,8 +29,7 @@ buildenv/*
 venv/*
 .venv/
 tools/*
-friture.egg-info
-friture_monitor.egg-info
+*.egg-info/
 .eggs/
 *.appx
 *.msix

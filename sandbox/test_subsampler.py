@@ -1,9 +1,13 @@
+# Copyright (C) 2026 Will Hirsch
+# SPDX-License-Identifier: GPL-3.0-only
+# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
+
 import numpy as np
 import matplotlib.pyplot as plt
 
-from friture_monitor import generated_filters
-from friture_monitor.audiobackend import SAMPLING_RATE
-from friture_monitor.delay_estimator import subsampler, subsampler_filtic
+from polyfriture import generated_filters
+from polyfriture.audiobackend import SAMPLING_RATE
+from polyfriture.delay_estimator import subsampler, subsampler_filtic
 
 Ns = int(1e4)
 #y = np.random.rand(Ns)

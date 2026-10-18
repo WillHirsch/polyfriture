@@ -1,8 +1,14 @@
+<!--
+Copyright (C) 2026 Will Hirsch
+SPDX-License-Identifier: GPL-3.0-only
+Part of Polyfriture. See COPYING.txt for the GNU General Public License.
+-->
+
 # AGENTS.md
 
 ## Overview
 
-**friture-monitor** is a fork of Friture, a real-time audio visualization and analysis application. It captures
+**Polyfriture** is a fork of Friture, a real-time audio visualization and analysis application. It captures
 live audio via PortAudio, processes it with NumPy, and renders visualizations in a
 PyQt6 hybrid QWidget + QML GUI.
 
@@ -10,23 +16,23 @@ PyQt6 hybrid QWidget + QML GUI.
 
 | Path                   | Purpose                                                   |
 |------------------------|-----------------------------------------------------------|
-| `main.py`              | Entry point; calls `friture_monitor.analyzer:main`                |
-| `friture_monitor/`             | Main application package                                  |
-| `friture_monitor/analyzer.py`  | `Friture` QMainWindow — sets up QML engine, audio backend, docks, timers; `main()` entry point |
-| `friture_monitor/audiobackend.py` | Audio I/O via `sounddevice` + `rtmixer`; singleton accessed as `AudioBackend()` |
-| `friture_monitor/audiobuffer.py` | `AudioBuffer` — ring buffer wrapper, forwards data to widgets |
-| `friture_monitor/ringbuffer.py` | `RingBuffer` — circular buffer for audio samples            |
-| `friture_monitor/audioproc.py`  | `audioproc` — FFT analysis for the spectrum widget         |
-| `friture_monitor/dockmanager.py`| `DockManager` — manages dock creation/closure/ordering     |
-| `friture_monitor/dock.py`       | `Dock` — QML dock container hosting an audio widget         |
-| `friture_monitor/widgetdict.py` | Registry of available visualization widgets (8 types)      |
-| `friture_monitor/store.py`      | `Store` singleton exposed to QML for dock state              |
-| `friture_monitor/plotting/`     | Plotting infrastructure (CoordinateTransform, ScaleDivision, frequency scales, color maps) |
-| `friture_monitor/signal/`       | Signal processing modules (IIR/FIR filters, resampling, transforms) |
-| `friture_monitor/generators/`   | Built-in signal generator widgets (sine, white, pink, sweep, burst) |
-| `friture_monitor/playback/`     | Audio playback subsystem                                   |
-| `friture_monitor/test/`         | Test suite                                                 |
-| `friture_monitor/*.qml`         | QML view files for visualizations and main window          |
+| `main.py`              | Entry point; calls `polyfriture.analyzer:main`                |
+| `polyfriture/`             | Main application package                                  |
+| `polyfriture/analyzer.py`  | `Friture` QMainWindow — sets up QML engine, audio backend, docks, timers; `main()` entry point |
+| `polyfriture/audiobackend.py` | Audio I/O via `sounddevice` + `rtmixer`; singleton accessed as `AudioBackend()` |
+| `polyfriture/audiobuffer.py` | `AudioBuffer` — ring buffer wrapper, forwards data to widgets |
+| `polyfriture/ringbuffer.py` | `RingBuffer` — circular buffer for audio samples            |
+| `polyfriture/audioproc.py`  | `audioproc` — FFT analysis for the spectrum widget         |
+| `polyfriture/dockmanager.py`| `DockManager` — manages dock creation/closure/ordering     |
+| `polyfriture/dock.py`       | `Dock` — QML dock container hosting an audio widget         |
+| `polyfriture/widgetdict.py` | Registry of available visualization widgets (8 types)      |
+| `polyfriture/store.py`      | `Store` singleton exposed to QML for dock state              |
+| `polyfriture/plotting/`     | Plotting infrastructure (CoordinateTransform, ScaleDivision, frequency scales, color maps) |
+| `polyfriture/signal/`       | Signal processing modules (IIR/FIR filters, resampling, transforms) |
+| `polyfriture/generators/`   | Built-in signal generator widgets (sine, white, pink, sweep, burst) |
+| `polyfriture/playback/`     | Audio playback subsystem                                   |
+| `polyfriture/test/`         | Test suite                                                 |
+| `polyfriture/*.qml`         | QML view files for visualizations and main window          |
 | `ui/`                   | Qt Designer `.ui` files (settings, main window)             |
 | `resources/`            | Qt resource files (`.qrc`, icons, splash)                   |
 | `installer/`            | PyInstaller spec and hooks for packaging                     |
@@ -81,7 +87,7 @@ Available widgets (see `widgetdict.py`):
 
 ### Signal Processing
 
-`friture_monitor/signal/` contains reusable DSP modules:
+`polyfriture/signal/` contains reusable DSP modules:
 
 - `lfilter.py` — IIR/FIR filtering, IIR-to-minimum-phase-FIR conversion
 - `decimate.py` — decimation
@@ -107,11 +113,11 @@ platform-specific instructions.
 
 | Command              | Tool   | Purpose                          |
 |----------------------|--------|----------------------------------|
-| `uv run pytest`      | pytest | Run the test suite (`friture_monitor/test/`) |
+| `uv run pytest`      | pytest | Run the test suite (`polyfriture/test/`) |
 | `uv run mypy`        | mypy   | Type-check the codebase           |
 | `uv run python main.py` | —   | Run the application              |
 
-Tests live in `friture_monitor/test/` and cover signal processing, filters, pitch
+Tests live in `polyfriture/test/` and cover signal processing, filters, pitch
 tracking, and QML integration.
 
 ## Regenerating Generated Files
@@ -119,12 +125,12 @@ tracking, and QML integration.
 If UI or resource files change, regenerate:
 
 ```bash
-uv run pyuic6 ui/settings.ui -o friture_monitor/ui_settings.py
-uv run pyrcc6 resources/friture.qrc -o friture_monitor/friture_rc.py
-uv run python friture_monitor/filter_design.py  # regenerate generated_filters.py / generated_fft.py
+uv run pyuic6 ui/settings.ui -o polyfriture/ui_settings.py
+uv run pyrcc6 resources/friture.qrc -o polyfriture/friture_rc.py
+uv run python polyfriture/filter_design.py  # regenerate generated_filters.py / generated_fft.py
 ```
 
-The Python package is `friture_monitor`; the application, command, settings, and
-log identity is `friture-monitor`. Preserve upstream copyright and license notices.
-`friture_monitor/ui_friture.py` is a hand-maintained main-window shell; only the
+The Python package is `polyfriture`; the application, command, settings, and
+log identity is `polyfriture`. Preserve upstream copyright and license notices.
+`polyfriture/ui_friture.py` is a hand-maintained main-window shell; only the
 settings dialog currently has a Qt Designer source.

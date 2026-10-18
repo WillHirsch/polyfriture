@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Will Hirsch
+# SPDX-License-Identifier: GPL-3.0-only
+# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
+
 [build-system]
 requires = [
     "setuptools",
@@ -5,12 +9,12 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "friture-monitor"
+name = "polyfriture"
 description = "A Friture fork for real-time audio monitoring and visualization"
 license = {file = "COPYING.txt"}
 readme = "README.rst"
 authors = [
-    {name = "Timothée Lecomte", email = "contact@friture.org"},
+    {name = "Will Hirsch", email = "contact@willh.uk"},
 ]
 maintainers = [{name = "Will Hirsch"}]
 keywords = ["audio", "spectrum", "spectrogram"]
@@ -40,12 +44,12 @@ dependencies = [
 ]
 
 [project.scripts]
-friture-monitor = "friture_monitor.analyzer:main"
+polyfriture = "polyfriture.analyzer:main"
 
 [project.urls]
-Homepage = "https://github.com/WillHirsch/friture-monitor"
-Repository = "https://github.com/WillHirsch/friture-monitor"
-Issues = "https://github.com/WillHirsch/friture-monitor/issues"
+Homepage = "https://github.com/WillHirsch/polyfriture"
+Repository = "https://github.com/WillHirsch/polyfriture"
+Issues = "https://github.com/WillHirsch/polyfriture/issues"
 Upstream = "https://github.com/tlecomte/friture"
 
 [tool.uv]
@@ -63,21 +67,24 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["friture_monitor/test"]
+testpaths = ["polyfriture/test"]
 python_files = ["test_*.py"]
 
 [tool.setuptools]
 packages=[
-    "friture_monitor",
-    "friture_monitor.data",
-    "friture_monitor.playback",
-    "friture_monitor.plotting",
-    "friture_monitor.generators",
-    "friture_monitor.signal",
+    "polyfriture",
+    "polyfriture.data",
+    "polyfriture.playback",
+    "polyfriture.plotting",
+    "polyfriture.generators",
+    "polyfriture.signal",
 ]
 
+[tool.setuptools.package-data]
+"polyfriture.data" = ["*.license"]
+
 [tool.setuptools.data-files]
-"share/applications" = ["appimage/friture-monitor.desktop"]
+"share/applications" = ["appimage/polyfriture.desktop"]
 
 [tool.setuptools.dynamic]
-version = {attr = "friture_monitor.__version__"}
+version = {attr = "polyfriture.__version__"}

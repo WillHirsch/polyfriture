@@ -1,0 +1,115 @@
+# -*- mode: python -*-
+# Copyright (C) 2026 Will Hirsch
+# SPDX-License-Identifier: GPL-3.0-only
+# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
+
+
+import os
+import platform
+
+import polyfriture  # for the version number
+from PyInstaller.utils.hooks import collect_data_files
+
+block_cipher = None
+
+# pyinstaller is conservative: it includes all Qt6 modules by default
+# to reduce our frozen image size, we exclude unused modules
+excludes = [
+        'PyQt6.QtHelp',
+        'PyQt6.QtMultimedia',
+        'PyQt6.QtSql',
+        'PyQt6.QtDesigner',
+        'PyQt6.QtTest',
+        'PyQt6.QtPositioning',
+        'PyQt6.QtSensors',
+        'PyQt6.QtSerialPort',
+        'PyQt6.QtWebChannel',
+        'PyQt6.QtWebEngine',
+        'PyQt6.QtWebEngineCore',
+        'PyQt6.QtWebEngineWidgets',
+        'PyQt6.QtWebSockets']
+
+excluded_binaries = [
+        'Qt6Bluetooth.dll',
+        'Qt6DBus.dll',
+        'Qt6Location.dll',
+        'Qt6Nfc.dll',
+        'Qt6Positioning.dll',
+        'Qt6PositioningQuick.dll',
+        'Qt6PrintSupport.dll',
+        'Qt6RemoteObjects.dll',
+        'Qt6WebSockets.dll',
+        'Qt6WinExtras.dll',
+        'Qt6Xml.dll',
+
+        # # macos
+        'QtHelp.framework',
+        'QtMultimedia.framework',
+        'QtSql.framework',
+        'QtDesigner.framework',
+        'QtTest.framework',
+        'QtXMLPatterns.framework',
+        'QtBluetooth.framework',
+        'QtConcurrent.framework',
+        'QtMultimediaWidgets.framework',
+        'QtPositioning.framework',
+        'QtSensors.framework',
+        'QtSerialPort.framework',
+        'QtWebChannel.framework',
+        'QtWebEngine.framework',
+        'QtWebEngineCore.framework',
+        'QtWebEngineWidgets.framework',
+        'QtWebSockets.framework'
+        ]
+
+pathex = []
+if platform.system() == "Windows":
+  # workaround for PyInstaller that does not look where the new PyQt6 official wheels put the Qt dlls
+  from PyInstaller.compat import getsitepackages
+  pathex += [os.path.join(x, 'PyQt6', 'Qt', 'bin') for x in getsitepackages()]
+
+a = Analysis(['main.py'],
+             pathex=pathex,
+             binaries=[],
+             datas= [('polyfriture/*.qml', '.' ), ('polyfriture/playback/*.qml', 'playback' ), ('polyfriture/generators/*.qml', 'generators' ), ('polyfriture/*.js', '.' ), ('polyfriture/data/*.npz', 'data' ), ('polyfriture/data/*.license', 'data' )],
+             hiddenimports=[],
+             hookspath=["installer/pyinstaller-hooks"], # our custom hooks for python-sounddevice
+             runtime_hooks=[],
+             excludes=excludes,
+             win_no_prefer_redirects=False,
+             win_private_assemblies=False,
+             cipher=block_cipher)
+
+a.binaries = TOC([x for x in a.binaries if x[0] not in excluded_binaries])
+
+pyz = PYZ(a.pure, a.zipped_data,
+             cipher=block_cipher)
+
+exe = EXE(pyz,
+          a.scripts,
+          exclude_binaries=True,
+          name='polyfriture',
+          debug=False,
+          strip=False,
+          upx=False,
+          console=False,
+          icon="resources/images/friture.ico")
+
+coll = COLLECT(exe,
+               a.binaries,
+               a.zipfiles,
+               a.datas,
+               strip=False,
+               upx=False,
+               name='polyfriture')
+
+app = BUNDLE(coll,
+         name='polyfriture.app',
+         icon='resources/images/friture.icns',
+         bundle_identifier="io.github.willhirsch.polyfriture",
+         version=polyfriture.__version__,
+         info_plist={
+             'CFBundleDisplayName': 'Polyfriture',
+             'NSMicrophoneUsageDescription': 'Polyfriture reads from the audio inputs to show visualizations',
+             'CFBundleVersion': polyfriture.__version__
+         })

@@ -1,16 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+Copyright (C) 2026 Will Hirsch
+SPDX-License-Identifier: GPL-3.0-only
+Part of Polyfriture. See COPYING.txt for the GNU General Public License.
+-->
 <!-- 
 
 To build an MSIX package to publish to the Microsoft Store:
 
 1. enable Windows developer mode (to allow side-loading of an unsigned package)
-2. the build output is in a friture-monitor-bin folder
-3. friture-monitor-bin should contain AppxManifest.xml
+2. the build output is in a polyfriture-bin folder
+3. polyfriture-bin should contain AppxManifest.xml
 4. in that folder, run: Add-AppxPackage -Register .\AppxManifest.xml
 5. app should start from Windows Start menu
   - to deploy again, increase the version
 6. from the parent folder, run:
-PS C:\...\friture-monitor> MakeAppx pack /v /d .\friture-monitor-bin /p friture-monitor.msix
+PS C:\...\polyfriture> MakeAppx pack /v /d .\polyfriture-bin /p polyfriture.msix
 7. CI produces an unsigned MSIX. Before Store publication, register a fork-specific
    package identity in Partner Center and replace Name and Publisher with the
    registered values. For sideloading, sign with a certificate matching Publisher.
@@ -24,14 +29,14 @@ https://docs.microsoft.com/en-us/windows/msix/package/create-app-package-with-ma
     xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
     xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities">
     <Identity
-        Name="WillHirsch.FritureMonitor"
+        Name="WillHirsch.Polyfriture"
         Version="0.0.0.0"
         Publisher="CN=WillHirsch"
         ProcessorArchitecture="x64" />
     <Properties>
-        <DisplayName>friture-monitor</DisplayName>
+        <DisplayName>Polyfriture</DisplayName>
         <PublisherDisplayName>Will Hirsch</PublisherDisplayName>
-        <Description>friture-monitor is an application to visualize and analyze live audio data in real-time.</Description>
+        <Description>Polyfriture is an application to visualize and analyze live audio data in real-time.</Description>
         <!-- TODO: proper png assets with scales -->
         <Logo>icon_512x512.png</Logo>
     </Properties>
@@ -45,9 +50,9 @@ https://docs.microsoft.com/en-us/windows/msix/package/create-app-package-with-ma
         <rescap:Capability Name="runFullTrust"/>
     </Capabilities>
     <Applications>
-        <Application Id="FritureMonitor" Executable="friture-monitor.exe" EntryPoint="Windows.FullTrustApplication">
-            <uap:VisualElements DisplayName="friture-monitor"
-                                Description="friture-monitor is an application to visualize and analyze live audio data in real-time."
+        <Application Id="Polyfriture" Executable="polyfriture.exe" EntryPoint="Windows.FullTrustApplication">
+            <uap:VisualElements DisplayName="Polyfriture"
+                                Description="Polyfriture is an application to visualize and analyze live audio data in real-time."
                                 Square150x150Logo="icon_512x512.png"
                                 Square44x44Logo="icon_512x512.png"
                                 BackgroundColor="transparent" />

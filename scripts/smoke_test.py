@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+# Copyright (C) 2026 Will Hirsch
+# SPDX-License-Identifier: GPL-3.0-only
+# Part of Polyfriture. See COPYING.txt for the GNU General Public License.
+
 #
-# Cross-platform smoke-test harness for the frozen friture-monitor packages.
+# Cross-platform smoke-test harness for the frozen polyfriture packages.
 #
 # It launches the packaged binary headless (the offscreen Qt platform, so no
 # display server is required) and verifies that the bundle is intact: the app
@@ -23,12 +27,12 @@ import signal
 import platform
 import subprocess
 
-from friture_monitor.application import APPLICATION_NAME, LOG_FILENAME, log_directory
+from polyfriture.application import APPLICATION_DISPLAY_NAME, LOG_FILENAME, log_directory
 
 # Best-effort: used to build the expected startup banner.
 try:
-    import friture_monitor
-    VERSION = friture_monitor.__version__
+    import polyfriture
+    VERSION = polyfriture.__version__
 except Exception:
     VERSION = None
 
@@ -78,7 +82,7 @@ FULL_INIT_LINE = "Init finished, entering the main loop"
 
 def startup_banner():
     return "%s %s starting on %s (%s)" % (
-        APPLICATION_NAME,
+        APPLICATION_DISPLAY_NAME,
         VERSION if VERSION is not None else "???",
         platform.system(),
         sys.platform,
