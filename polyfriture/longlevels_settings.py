@@ -19,7 +19,8 @@
 # along with Friture.  If not, see <http://www.gnu.org/licenses/>.
 
 from PyQt6 import QtWidgets
-from polyfriture.audiobackend import SAMPLING_RATE
+from polyfriture.settings_model import IntSetting, SettingsModel
+from polyfriture.settings_binding import bind_spinbox
 
 DEFAULT_MAXTIME = 600
 #DEFAULT_MINTIME = 20
@@ -29,10 +30,20 @@ DEFAULT_RESPONSE_TIME = 20
 #DEFAULT_RESPONSE_TIME_INDEX = 0
 
 
+class LongLevelsSettings(SettingsModel):
+    fields = {
+        "Min": IntSetting(DEFAULT_LEVEL_MIN, minimum=-200, maximum=200),
+        "Max": IntSetting(DEFAULT_LEVEL_MAX, minimum=-200, maximum=200),
+        "RespTime": IntSetting(DEFAULT_RESPONSE_TIME, minimum=1, maximum=20),
+        "TimeMax": IntSetting(DEFAULT_MAXTIME, minimum=5, maximum=3600),
+    }
+
+
 class LongLevels_Settings_Dialog(QtWidgets.QDialog):
 
     def __init__(self, parent, view_model):
         super().__init__(parent)
+        self.model = LongLevelsSettings()
 
         self.setWindowTitle("Long levels settings")
 
@@ -40,33 +51,21 @@ class LongLevels_Settings_Dialog(QtWidgets.QDialog):
 
         self.spinBox_specmin = QtWidgets.QSpinBox(self)
         self.spinBox_specmin.setKeyboardTracking(False)
-        self.spinBox_specmin.setMinimum(-200)
-        self.spinBox_specmin.setMaximum(200)
-        self.spinBox_specmin.setProperty("value", DEFAULT_LEVEL_MIN)
         self.spinBox_specmin.setObjectName("longlevels_specmin")
         self.spinBox_specmin.setSuffix(" dB")
 
         self.spinBox_specmax = QtWidgets.QSpinBox(self)
         self.spinBox_specmax.setKeyboardTracking(False)
-        self.spinBox_specmax.setMinimum(-200)
-        self.spinBox_specmax.setMaximum(200)
-        self.spinBox_specmax.setProperty("value", DEFAULT_LEVEL_MAX)
         self.spinBox_specmax.setObjectName("longlevels_specmax")
         self.spinBox_specmax.setSuffix(" dB")
 
         self.spinBox_resptime = QtWidgets.QSpinBox(self)
         self.spinBox_resptime.setKeyboardTracking(False)
-        self.spinBox_resptime.setMinimum(1)
-        self.spinBox_resptime.setMaximum(20)
-        self.spinBox_resptime.setProperty("value", DEFAULT_RESPONSE_TIME)
         self.spinBox_resptime.setObjectName("longlevels_resptime")
         self.spinBox_resptime.setSuffix(" sec")
 
         self.spinBox_timemax = QtWidgets.QSpinBox(self)
         self.spinBox_timemax.setKeyboardTracking(False)
-        self.spinBox_timemax.setMinimum(5)
-        self.spinBox_timemax.setMaximum(3600)
-        self.spinBox_timemax.setProperty("value", DEFAULT_MAXTIME)
         self.spinBox_timemax.setObjectName("longlevels_timemax")
         self.spinBox_timemax.setSuffix(" sec")
 
@@ -78,25 +77,18 @@ class LongLevels_Settings_Dialog(QtWidgets.QDialog):
 
         self.setLayout(self.formLayout)
 
-        self.spinBox_specmin.valueChanged.connect(view_model.setmin)
-        self.spinBox_specmax.valueChanged.connect(view_model.setmax)
-        self.spinBox_resptime.valueChanged.connect(view_model.setresptime)
-        self.spinBox_timemax.valueChanged.connect(view_model.setduration)
+        bind_spinbox(self.spinBox_specmin, self.model, "Min", view_model.setmin)
+        bind_spinbox(self.spinBox_specmax, self.model, "Max", view_model.setmax)
+        bind_spinbox(self.spinBox_resptime, self.model, "RespTime", view_model.setresptime)
+        bind_spinbox(self.spinBox_timemax, self.model, "TimeMax", view_model.setduration)
 
     # method
     def saveState(self, settings):
-        settings.setValue("Min", self.spinBox_specmin.value())
-        settings.setValue("Max", self.spinBox_specmax.value())
-        settings.setValue("RespTime", self.spinBox_resptime.value())
-        settings.setValue("TimeMax", self.spinBox_timemax.value())
+        self.model.save(settings)
 
-    # method
     def restoreState(self, settings):
-        colorMin = settings.value("Min", DEFAULT_LEVEL_MIN, type=int)
-        self.spinBox_specmin.setValue(colorMin)
-        colorMax = settings.value("Max", DEFAULT_LEVEL_MAX, type=int)
-        self.spinBox_specmax.setValue(colorMax)
-        resptime = settings.value("RespTime", DEFAULT_RESPONSE_TIME, type=int)
-        self.spinBox_resptime.setValue(resptime)
-        timemax = settings.value("TimeMax", DEFAULT_MAXTIME, type=int)
-        self.spinBox_timemax.setValue(timemax)
+        self.model.restore(settings)
+        self.spinBox_specmin.setValue(self.model.get("Min"))
+        self.spinBox_specmax.setValue(self.model.get("Max"))
+        self.spinBox_resptime.setValue(self.model.get("RespTime"))
+        self.spinBox_timemax.setValue(self.model.get("TimeMax"))

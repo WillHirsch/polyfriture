@@ -21,6 +21,8 @@
 import logging
 
 from PyQt6 import QtWidgets
+from polyfriture.settings_model import BoolSetting, ChoiceSetting, IntSetting, SettingsModel
+from polyfriture.settings_binding import bind_checkbox, bind_combobox, bind_spinbox
 from polyfriture.audiobackend import SAMPLING_RATE
 import polyfriture.plotting.frequency_scales as fscales
 
@@ -38,10 +40,26 @@ DEFAULT_RESPONSE_TIME = 0.025
 DEFAULT_RESPONSE_TIME_INDEX = 0
 
 
+class SpectrumSettings(SettingsModel):
+    fields = {
+        "fftSize": ChoiceSetting(DEFAULT_FFT_SIZE, labels=tuple(f"{2 ** exponent} points" for exponent in range(5, 15))),
+        "freqScale": ChoiceSetting(DEFAULT_FREQ_SCALE, labels=tuple(scale.NAME for scale in fscales.ALL)),
+        "freqMin": IntSetting(DEFAULT_MINFREQ, minimum=20, maximum=SAMPLING_RATE // 2),
+        "freqMax": IntSetting(DEFAULT_MAXFREQ, minimum=20, maximum=SAMPLING_RATE // 2),
+        "Min": IntSetting(DEFAULT_SPEC_MIN, minimum=-200, maximum=200),
+        "Max": IntSetting(DEFAULT_SPEC_MAX, minimum=-200, maximum=200),
+        "weighting": ChoiceSetting(DEFAULT_WEIGHTING, labels=("None", "A", "B", "C")),
+        "responseTime": ChoiceSetting(DEFAULT_RESPONSE_TIME_INDEX, labels=("25 ms (Impulse)", "125 ms (Fast)", "300 ms", "1s (Slow)", "5s (Very Slow)")),
+        "showFreqLabels": BoolSetting(DEFAULT_SHOW_FREQ_LABELS),
+        "showPitchLabel": BoolSetting(DEFAULT_SHOW_PITCH_LABELS),
+    }
+
+
 class Spectrum_Settings_Dialog(QtWidgets.QDialog):
 
     def __init__(self, parent, view_model):
         super().__init__(parent)
+        self.model = SpectrumSettings()
 
         self.view_model = view_model
 
@@ -53,80 +71,41 @@ class Spectrum_Settings_Dialog(QtWidgets.QDialog):
 
         self.comboBox_fftsize = QtWidgets.QComboBox(self)
         self.comboBox_fftsize.setObjectName("comboBox_fftsize")
-        self.comboBox_fftsize.addItem("32 points")
-        self.comboBox_fftsize.addItem("64 points")
-        self.comboBox_fftsize.addItem("128 points")
-        self.comboBox_fftsize.addItem("256 points")
-        self.comboBox_fftsize.addItem("512 points")
-        self.comboBox_fftsize.addItem("1024 points")
-        self.comboBox_fftsize.addItem("2048 points")
-        self.comboBox_fftsize.addItem("4096 points")
-        self.comboBox_fftsize.addItem("8192 points")
-        self.comboBox_fftsize.addItem("16384 points")
-        self.comboBox_fftsize.setCurrentIndex(DEFAULT_FFT_SIZE)
 
         self.comboBox_freqscale = QtWidgets.QComboBox(self)
         self.comboBox_freqscale.setObjectName("comboBox_freqscale")
-        for scale in fscales.ALL:
-            self.comboBox_freqscale.addItem(scale.NAME)
-        self.comboBox_freqscale.setCurrentIndex(DEFAULT_FREQ_SCALE)
 
         self.spinBox_minfreq = QtWidgets.QSpinBox(self)
-        self.spinBox_minfreq.setMinimum(20)
-        self.spinBox_minfreq.setMaximum(SAMPLING_RATE // 2)
         self.spinBox_minfreq.setSingleStep(10)
-        self.spinBox_minfreq.setValue(DEFAULT_MINFREQ)
         self.spinBox_minfreq.setObjectName("spinBox_minfreq")
         self.spinBox_minfreq.setSuffix(" Hz")
 
         self.spinBox_maxfreq = QtWidgets.QSpinBox(self)
-        self.spinBox_maxfreq.setMinimum(20)
-        self.spinBox_maxfreq.setMaximum(SAMPLING_RATE // 2)
         self.spinBox_maxfreq.setSingleStep(1000)
-        self.spinBox_maxfreq.setProperty("value", DEFAULT_MAXFREQ)
         self.spinBox_maxfreq.setObjectName("spinBox_maxfreq")
         self.spinBox_maxfreq.setSuffix(" Hz")
 
         self.spinBox_specmin = QtWidgets.QSpinBox(self)
         self.spinBox_specmin.setKeyboardTracking(False)
-        self.spinBox_specmin.setMinimum(-200)
-        self.spinBox_specmin.setMaximum(200)
-        self.spinBox_specmin.setProperty("value", DEFAULT_SPEC_MIN)
         self.spinBox_specmin.setObjectName("spinBox_specmin")
         self.spinBox_specmin.setSuffix(" dB")
 
         self.spinBox_specmax = QtWidgets.QSpinBox(self)
         self.spinBox_specmax.setKeyboardTracking(False)
-        self.spinBox_specmax.setMinimum(-200)
-        self.spinBox_specmax.setMaximum(200)
-        self.spinBox_specmax.setProperty("value", DEFAULT_SPEC_MAX)
         self.spinBox_specmax.setObjectName("spinBox_specmax")
         self.spinBox_specmax.setSuffix(" dB")
 
         self.comboBox_weighting = QtWidgets.QComboBox(self)
         self.comboBox_weighting.setObjectName("weighting")
-        self.comboBox_weighting.addItem("None")
-        self.comboBox_weighting.addItem("A")
-        self.comboBox_weighting.addItem("B")
-        self.comboBox_weighting.addItem("C")
-        self.comboBox_weighting.setCurrentIndex(DEFAULT_WEIGHTING)
 
         self.comboBox_response_time = QtWidgets.QComboBox(self)
         self.comboBox_response_time.setObjectName("response_time")
-        self.comboBox_response_time.addItem("25 ms (Impulse)")
-        self.comboBox_response_time.addItem("125 ms (Fast)")
-        self.comboBox_response_time.addItem("300 ms")
-        self.comboBox_response_time.addItem("1s (Slow)")
-        self.comboBox_response_time.addItem("5s (Very Slow)")
-        self.comboBox_response_time.setCurrentIndex(DEFAULT_RESPONSE_TIME_INDEX)
 
         self.checkBox_showFreqLabels = QtWidgets.QCheckBox(self)
         self.checkBox_showFreqLabels.setObjectName("showFreqLabels")
-        self.checkBox_showFreqLabels.setChecked(DEFAULT_SHOW_FREQ_LABELS)
 
         self.checkBox_showPitchLabel = QtWidgets.QCheckBox(self)
         self.checkBox_showPitchLabel.setObjectName("showPitchLabels")
-        self.checkBox_showPitchLabel.setChecked(DEFAULT_SHOW_PITCH_LABELS)
 
         self.formLayout.addRow("FFT Size:", self.comboBox_fftsize)
         self.formLayout.addRow("Frequency scale:", self.comboBox_freqscale)
@@ -141,16 +120,16 @@ class Spectrum_Settings_Dialog(QtWidgets.QDialog):
 
         self.setLayout(self.formLayout)
 
-        self.comboBox_fftsize.currentIndexChanged.connect(self.fftsizechanged)
-        self.comboBox_freqscale.currentIndexChanged.connect(self.freqscalechanged)
-        self.spinBox_minfreq.valueChanged.connect(self.view_model.setminfreq)
-        self.spinBox_maxfreq.valueChanged.connect(self.view_model.setmaxfreq)
-        self.spinBox_specmin.valueChanged.connect(self.view_model.setmin)
-        self.spinBox_specmax.valueChanged.connect(self.view_model.setmax)
-        self.comboBox_weighting.currentIndexChanged.connect(self.view_model.setweighting)
-        self.comboBox_response_time.currentIndexChanged.connect(self.responsetimechanged)
-        self.checkBox_showFreqLabels.toggled.connect(self.view_model.setShowFreqLabel)
-        self.checkBox_showPitchLabel.toggled.connect(self.view_model.setShowPitchLabel)
+        bind_combobox(self.comboBox_fftsize, self.model, "fftSize", self.fftsizechanged)
+        bind_combobox(self.comboBox_freqscale, self.model, "freqScale", self.freqscalechanged)
+        bind_spinbox(self.spinBox_minfreq, self.model, "freqMin", self.view_model.setminfreq)
+        bind_spinbox(self.spinBox_maxfreq, self.model, "freqMax", self.view_model.setmaxfreq)
+        bind_spinbox(self.spinBox_specmin, self.model, "Min", self.view_model.setmin)
+        bind_spinbox(self.spinBox_specmax, self.model, "Max", self.view_model.setmax)
+        bind_combobox(self.comboBox_weighting, self.model, "weighting", self.view_model.setweighting)
+        bind_combobox(self.comboBox_response_time, self.model, "responseTime", self.responsetimechanged)
+        bind_checkbox(self.checkBox_showFreqLabels, self.model, "showFreqLabels", self.view_model.setShowFreqLabel)
+        bind_checkbox(self.checkBox_showPitchLabel, self.model, "showPitchLabel", self.view_model.setShowPitchLabel)
 
     # slot
     def fftsizechanged(self, index):
@@ -175,42 +154,23 @@ class Spectrum_Settings_Dialog(QtWidgets.QDialog):
         elif index == 3:
             response_time = 1.
         elif index == 4:
-            response_time = 5.            
+            response_time = 5.
         self.logger.info("responsetimechanged slot %d %f", index, response_time)
         self.view_model.setresponsetime(response_time)
 
     # method
     def saveState(self, settings):
-        settings.setValue("fftSize", self.comboBox_fftsize.currentIndex())
-        settings.setValue("freqScale", self.comboBox_freqscale.currentIndex())
-        settings.setValue("freqMin", self.spinBox_minfreq.value())
-        settings.setValue("freqMax", self.spinBox_maxfreq.value())
-        settings.setValue("Min", self.spinBox_specmin.value())
-        settings.setValue("Max", self.spinBox_specmax.value())
-        settings.setValue("weighting", self.comboBox_weighting.currentIndex())
-        settings.setValue("responseTime", self.comboBox_response_time.currentIndex())
-        settings.setValue("showFreqLabels", self.checkBox_showFreqLabels.isChecked())
-        settings.setValue("showPitchLabel", self.checkBox_showPitchLabel.isChecked())
+        self.model.save(settings)
 
-    # method
     def restoreState(self, settings):
-        fft_size = settings.value("fftSize", DEFAULT_FFT_SIZE, type=int)  # 7th index is 1024 points
-        self.comboBox_fftsize.setCurrentIndex(fft_size)
-        freqscale = settings.value("freqScale", DEFAULT_FREQ_SCALE, type=int)
-        self.comboBox_freqscale.setCurrentIndex(freqscale)
-        freqMin = settings.value("freqMin", DEFAULT_MINFREQ, type=int)
-        self.spinBox_minfreq.setValue(freqMin)
-        freqMax = settings.value("freqMax", DEFAULT_MAXFREQ, type=int)
-        self.spinBox_maxfreq.setValue(freqMax)
-        colorMin = settings.value("Min", DEFAULT_SPEC_MIN, type=int)
-        self.spinBox_specmin.setValue(colorMin)
-        colorMax = settings.value("Max", DEFAULT_SPEC_MAX, type=int)
-        self.spinBox_specmax.setValue(colorMax)
-        weighting = settings.value("weighting", DEFAULT_WEIGHTING, type=int)
-        self.comboBox_weighting.setCurrentIndex(weighting)
-        responseTime = settings.value("responseTime", DEFAULT_RESPONSE_TIME_INDEX, type=int)
-        self.comboBox_response_time.setCurrentIndex(responseTime)
-        showFreqLabels = settings.value("showFreqLabels", DEFAULT_SHOW_FREQ_LABELS, type=bool)
-        self.checkBox_showFreqLabels.setChecked(showFreqLabels)
-        showPitchLabel = settings.value("showPitchLabel", DEFAULT_SHOW_PITCH_LABELS, type=bool)
-        self.checkBox_showPitchLabel.setChecked(showPitchLabel)
+        self.model.restore(settings)
+        self.comboBox_fftsize.setCurrentIndex(self.model.get("fftSize"))
+        self.comboBox_freqscale.setCurrentIndex(self.model.get("freqScale"))
+        self.spinBox_minfreq.setValue(self.model.get("freqMin"))
+        self.spinBox_maxfreq.setValue(self.model.get("freqMax"))
+        self.spinBox_specmin.setValue(self.model.get("Min"))
+        self.spinBox_specmax.setValue(self.model.get("Max"))
+        self.comboBox_weighting.setCurrentIndex(self.model.get("weighting"))
+        self.comboBox_response_time.setCurrentIndex(self.model.get("responseTime"))
+        self.checkBox_showFreqLabels.setChecked(self.model.get("showFreqLabels"))
+        self.checkBox_showPitchLabel.setChecked(self.model.get("showPitchLabel"))

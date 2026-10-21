@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # Copyright (C) 2009 Timothée Lecomte
+# Copyright (C) 2026 Will Hirsch
 
 # This file is part of Friture.
 #
@@ -17,10 +18,20 @@
 # You should have received a copy of the GNU General Public License
 # along with Friture.  If not, see <http://www.gnu.org/licenses/>.
 
+import logging
+
 import numpy as np
 from PyQt6.QtCore import QObject, pyqtProperty, pyqtSignal  # type: ignore
+from polyfriture.settings_model import FloatSetting, SettingsModel, SettingsValueError
 
 DEFAULT_SINE_FREQUENCY = 440.
+
+
+class SineSettings(SettingsModel):
+    fields = {
+        "sine frequency": FloatSetting(DEFAULT_SINE_FREQUENCY, minimum=20., maximum=22000.),
+    }
+
 
 class SineGenerator:
 
@@ -44,31 +55,43 @@ class Sine_Generator_Settings_View_Model(QObject):
 
     def __init__(self, parent: QObject):
         super().__init__(parent)
-        self._frequency = DEFAULT_SINE_FREQUENCY
+        self.settings = SineSettings()
         self.offset = 0
         self.lastt = 0
 
     @pyqtProperty(float, notify=frequency_changed)
     def frequency(self) -> float:
-        return self._frequency
+        return self.settings.get("sine frequency")
 
     @frequency.setter # type: ignore
     def frequency(self, frequency: float):
-        if self._frequency != frequency:
-            oldf = self._frequency
-            self._frequency = frequency
+        previous = self.frequency
+        try:
+            self.settings.set("sine frequency", frequency)
+        except SettingsValueError as error:
+            logging.getLogger(__name__).warning("Ignoring invalid sine frequency: %s", error)
+            return
+        self._frequency_updated(previous)
 
-            # the offset is adapted to avoid phase break
-            lastphase = 2. * np.pi * self.lastt * oldf + self.offset
-            newphase = 2. * np.pi * self.lastt * self._frequency+ self.offset
-            self.offset += (lastphase - newphase)
+    def _frequency_updated(self, previous):
+        if previous != self.frequency:
+            # Adapt the offset to avoid a phase break.
+            self.offset += 2. * np.pi * self.lastt * (previous - self.frequency)
             self.offset %= 2. * np.pi
+            self.frequency_changed.emit(self.frequency)
 
-            self.frequency_changed.emit(frequency)
+    @pyqtProperty(float, constant=True)
+    def frequencyMinimum(self):
+        return self.settings.fields["sine frequency"].minimum
+
+    @pyqtProperty(float, constant=True)
+    def frequencyMaximum(self):
+        return self.settings.fields["sine frequency"].maximum
 
     def saveState(self, settings):
-        settings.setValue("sine frequency", self.frequency)
+        self.settings.save(settings)
 
     def restoreState(self, settings):
-        frequency = settings.value("sine frequency", DEFAULT_SINE_FREQUENCY, type=float)
-        self.frequency = frequency
+        previous = self.frequency
+        self.settings.restore(settings)
+        self._frequency_updated(previous)

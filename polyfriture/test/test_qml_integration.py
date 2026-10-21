@@ -107,7 +107,6 @@ class QMLIntegrationTestBase(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication(sys.argv)
         cls.store = GetStore()
-        cls.engine = QQmlEngine(cls.store)
 
     def _write_temp_qml(self, content):
         """Write QML content to a temporary file and return its URL."""
@@ -118,8 +117,10 @@ class QMLIntegrationTestBase(unittest.TestCase):
         return QUrl.fromLocalFile(path)
 
     def _create_engine(self):
-        """Return the shared QQmlEngine for testing."""
-        return self.engine
+        """Isolate component and directory caches from other generated fixtures."""
+        engine = QQmlEngine(self.store)
+        self.addCleanup(engine.deleteLater)
+        return engine
 
 
 class TestContextProperties(QMLIntegrationTestBase):
@@ -426,8 +427,7 @@ Rectangle {
         self.assertFalse(obj.property('burst_visible'))
 
         # Switch to white (index 1)
-        gvm._generatorIndex = 1
-        gvm.generatorChanged.emit()
+        gvm.generatorIndex = 1
 
         self.assertEqual(obj.property('gen_index'), 1)
         self.assertFalse(obj.property('sine_visible'))
