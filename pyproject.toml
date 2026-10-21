@@ -71,7 +71,6 @@ python_files = ["test_*.py"]
 packages=[
     "polyfriture",
     "polyfriture.data",
-    "polyfriture.playback",
     "polyfriture.plotting",
     "polyfriture.generators",
     "polyfriture.signal",

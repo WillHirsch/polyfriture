@@ -67,7 +67,7 @@ if platform.system() == "Windows":
 a = Analysis(['main.py'],
              pathex=pathex,
              binaries=[],
-             datas= [('polyfriture/*.qml', '.' ), ('polyfriture/playback/*.qml', 'playback' ), ('polyfriture/generators/*.qml', 'generators' ), ('polyfriture/*.js', '.' ), ('polyfriture/data/*.npz', 'data' )],
+             datas= [('polyfriture/*.qml', '.' ), ('polyfriture/generators/*.qml', 'generators' ), ('polyfriture/*.js', '.' ), ('polyfriture/data/*.npz', 'data' )],
              hiddenimports=[],
              hookspath=["installer/pyinstaller-hooks"], # our custom hooks for python-sounddevice
              runtime_hooks=[],

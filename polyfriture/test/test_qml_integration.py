@@ -38,7 +38,6 @@ from polyfriture.level_data import LevelData
 from polyfriture.level_view_model import LevelViewModel
 from polyfriture.main_toolbar_view_model import MainToolbarViewModel
 from polyfriture.main_window_view_model import MainWindowViewModel
-from polyfriture.playback.playback_control_view_model import PlaybackControlViewModel
 from polyfriture.plotCurve import PlotCurve
 from polyfriture.plotFilledCurve import PlotFilledCurve
 from polyfriture.plotting.coordinateTransform import CoordinateTransform
@@ -79,7 +78,6 @@ def _register_qml_types():
     qmlRegisterType(Spectrum_Data, QML_MODULE, 1, 0, 'SpectrumData')
     qmlRegisterType(LevelData, QML_MODULE, 1, 0, 'LevelData')
     qmlRegisterType(LevelViewModel, QML_MODULE, 1, 0, 'LevelViewModel')
-    qmlRegisterType(PlaybackControlViewModel, QML_MODULE, 1, 0, 'PlaybackControlViewModel')
     qmlRegisterType(MainWindowViewModel, QML_MODULE, 1, 0, 'MainWindowViewModel')
     qmlRegisterType(MainToolbarViewModel, QML_MODULE, 1, 0, 'MainToolbarViewModel')
     qmlRegisterType(Axis, QML_MODULE, 1, 0, 'Axis')
@@ -161,7 +159,6 @@ Rectangle {
     property bool has_toolbar: test_vm.toolbar_view_model !== undefined
     property bool recording: test_vm.toolbar_view_model.recording
     property bool has_level_vm: test_vm.level_view_model !== undefined
-    property bool has_playback_vm: test_vm.playback_control_view_model !== undefined
 }
 """
         url = self._write_temp_qml(qml)
@@ -173,7 +170,6 @@ Rectangle {
         self.assertTrue(obj.property('has_toolbar'))
         self.assertTrue(obj.property('recording'))
         self.assertTrue(obj.property('has_level_vm'))
-        self.assertTrue(obj.property('has_playback_vm'))
 
     def test_child_context_viewModel_not_overwriting_root(self):
         """Verify that child context context properties don't interfere with root context."""
@@ -344,7 +340,6 @@ import polyfriture 1.0
 Rectangle {
     property bool has_toolbar: main_window_view_model.toolbar_view_model !== undefined
     property bool has_level: main_window_view_model.level_view_model !== undefined
-    property bool has_playback: main_window_view_model.playback_control_view_model !== undefined
 }
 """
         url = self._write_temp_qml(qml)
@@ -355,7 +350,6 @@ Rectangle {
         obj = component.create()
         self.assertTrue(obj.property('has_toolbar'))
         self.assertTrue(obj.property('has_level'))
-        self.assertTrue(obj.property('has_playback'))
 
     def test_axis_scale_division(self):
         """Verify Axis.scale_division is accessible from QML."""
@@ -487,91 +481,6 @@ Rectangle {
         self.assertTrue(obj.property('has_sweep'))
         self.assertTrue(obj.property('has_burst'))
 
-    def test_playback_control_enabled_binding(self):
-        """Verify playback_control_enabled property is accessible and updates via notify signal."""
-        engine = self._create_engine()
-        vm = MainWindowViewModel(engine)
-        engine.rootContext().setContextProperty("main_window_view_model", vm)
-
-        qml = """
-import QtQuick 2.0
-import polyfriture 1.0
-Rectangle {
-    property bool visible_value: main_window_view_model.playback_control_enabled
-}
-"""
-        url = self._write_temp_qml(qml)
-        component = QQmlComponent(engine)
-        component.loadUrl(url)
-        self.assertEqual(component.status(), QQmlComponent.Status.Ready,
-                         f"Component errors: {[e.toString() for e in component.errors()]}")
-        obj = component.create()
-        initial = obj.property('visible_value')
-        self.assertFalse(initial, f"Expected False initially, got {initial}")
-
-        vm.set_playback_control_enabled(True)
-        after_set = obj.property('visible_value')
-        self.assertTrue(after_set, f"Expected True after setting, got {after_set}")
-
-    def test_playback_control_component_creation(self):
-        """Verify PlaybackControl.qml can be created with playback_control_view_model."""
-        engine = self._create_engine()
-        vm = MainWindowViewModel(engine)
-        engine.rootContext().setContextProperty("main_window_view_model", vm)
-
-        playback_url = QUrl.fromLocalFile(qml_path('playback')).toString()
-        qml = f"""
-import QtQuick 2.0
-import QtQuick.Layouts 1.15
-import polyfriture 1.0
-import "{playback_url}"
-Rectangle {{
-    id: root
-    PlaybackControl {{
-        id: playbackControl
-        Layout.fillWidth: true
-        viewModel: main_window_view_model.playback_control_view_model
-        visible: main_window_view_model.playback_control_enabled
-    }}
-}}
-"""
-        url = self._write_temp_qml(qml)
-        component = QQmlComponent(engine)
-        component.loadUrl(url)
-        self.assertEqual(component.status(), QQmlComponent.Status.Ready,
-                         f"Component errors: {[e.toString() for e in component.errors()]}")
-        obj = component.create()
-        playback_child = obj.children()[0] if obj.children() else None
-        self.assertIsNotNone(playback_child, "PlaybackControl visual child not created")
-
-    def test_show_playback_checkbox_changed_emits_correct_bool(self):
-        """Verify CheckState comparison in show_playback_checkbox_changed works with Qt6 enums."""
-        from PyQt6.QtWidgets import QCheckBox
-        from PyQt6.QtCore import Qt
-
-        class FakeSettings(QObject):
-            show_playback_changed = pyqtSignal(bool)
-
-            def __init__(self):
-                super().__init__()
-                self.checkbox_showPlayback = QCheckBox()
-                self.checkbox_showPlayback.stateChanged.connect(self.show_playback_checkbox_changed)
-
-            def show_playback_checkbox_changed(self, state):
-                self.show_playback_changed.emit(state == QtCore.Qt.CheckState.Checked.value)
-
-        settings = FakeSettings()
-        results = []
-        settings.show_playback_changed.connect(results.append)
-
-        settings.checkbox_showPlayback.setCheckState(QtCore.Qt.CheckState.Checked)
-        self.assertEqual(len(results), 1)
-        self.assertTrue(results[0], "Expected True when check state set to Checked")
-
-        results.clear()
-        settings.checkbox_showPlayback.setCheckState(QtCore.Qt.CheckState.Unchecked)
-        self.assertEqual(len(results), 1)
-        self.assertFalse(results[0], "Expected False when check state set to Unchecked")
 
 
 class TestSweepSettingsPersistence(unittest.TestCase):

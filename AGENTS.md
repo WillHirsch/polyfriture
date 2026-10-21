@@ -22,7 +22,6 @@
 | `polyfriture/plotting/`     | Plotting infrastructure (CoordinateTransform, ScaleDivision, frequency scales, color maps) |
 | `polyfriture/signal/`       | Signal processing modules (IIR/FIR filters, resampling, transforms) |
 | `polyfriture/generators/`   | Built-in signal generator widgets (sine, white, pink, sweep, burst) |
-| `polyfriture/playback/`     | Audio playback subsystem                                   |
 | `polyfriture/test/`         | Test suite                                                 |
 | `polyfriture/*.qml`         | QML view files for visualizations and main window          |
 | `ui/`                   | Qt Designer `.ui` files (settings, main window)             |

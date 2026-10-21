@@ -22,7 +22,7 @@ import sys
 import logging
 
 from PyQt6 import QtCore, QtWidgets
-from PyQt6.QtCore import pyqtSignal, pyqtProperty  # type: ignore
+from PyQt6.QtCore import pyqtSignal  # type: ignore
 from polyfriture.audiobackend import AudioBackend
 from polyfriture.application import APPLICATION_DISPLAY_NAME
 from polyfriture.main_toolbar_view_model import MainToolbarViewModel
@@ -39,8 +39,6 @@ no_input_device_message = f"""No audio input device has been found.
 
 
 class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
-    show_playback_changed = pyqtSignal(bool)
-    history_length_changed = pyqtSignal(int)
     theme_preference_changed = pyqtSignal(int)
 
     def __init__(self, parent, toolbar_view_model: MainToolbarViewModel):
@@ -99,12 +97,6 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
         self.comboBox_secondChannel.activated.connect(self.second_channel_changed)
         self.radioButton_single.toggled.connect(self.single_input_type_selected)
         self.radioButton_duo.toggled.connect(self.duo_input_type_selected)
-        self.checkbox_showPlayback.stateChanged.connect(self.show_playback_checkbox_changed)
-        self.spinBox_historyLength.editingFinished.connect(self.history_length_edit_finished)
-
-    @pyqtProperty(bool, notify=show_playback_changed) # type: ignore
-    def show_playback(self) -> bool:
-        return self.checkbox_showPlayback.checkState() == QtCore.Qt.CheckState.Checked
 
     # slot
     # used when no audio input device has been found, to exit immediately
@@ -192,14 +184,6 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
             self.logger.info("Switching to difference between two inputs")
 
     # slot
-    def show_playback_checkbox_changed(self, state: int) -> None:
-        self.show_playback_changed.emit(state == QtCore.Qt.CheckState.Checked.value)
-
-    # slot
-    def history_length_edit_finished(self) -> None:
-        self.history_length_changed.emit(self.spinBox_historyLength.value())
-
-    # slot
     def theme_preference_toggled(self, button_id: int, checked: bool) -> None:
         if checked:
             self.theme_preference_changed.emit(button_id)
@@ -213,8 +197,6 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
         settings.setValue("firstChannel", self.comboBox_firstChannel.currentIndex())
         settings.setValue("secondChannel", self.comboBox_secondChannel.currentIndex())
         settings.setValue("duoInput", self.inputTypeButtonGroup.checkedId())
-        settings.setValue("showPlayback", self.checkbox_showPlayback.checkState().value)
-        settings.setValue("historyLength", self.spinBox_historyLength.value())
         settings.setValue("themePreference", self.themeButtonGroup.checkedId())
 
     # method
@@ -230,9 +212,5 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
             self.comboBox_secondChannel.setCurrentIndex(channel)
             duo_input_id = settings.value("duoInput", 0, type=int)
             self.inputTypeButtonGroup.button(duo_input_id).setChecked(True)
-        self.checkbox_showPlayback.setCheckState(QtCore.Qt.CheckState(settings.value("showPlayback", 0, type=int)))
-        self.spinBox_historyLength.setValue(settings.value("historyLength", 30, type=int))
         theme_preference_id = settings.value("themePreference", 0, type=int)
         self.themeButtonGroup.button(theme_preference_id).setChecked(True)
-        # need to emit this because setValue doesn't emit editFinished
-        self.history_length_changed.emit(self.spinBox_historyLength.value())

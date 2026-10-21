@@ -40,7 +40,6 @@ from PyQt6.QtQuick import QQuickView
 from polyfriture.exceptionhandler import errorBox, fileexcepthook
 import polyfriture
 from polyfriture.main_toolbar_view_model import MainToolbarViewModel
-from polyfriture.playback.playback_control_view_model import PlaybackControlViewModel
 from polyfriture.ui_friture import Ui_MainWindow
 from polyfriture.about import About_Dialog  # About dialog
 from polyfriture.settings import Settings_Dialog  # Setting dialog
@@ -57,8 +56,6 @@ from polyfriture.scope_data import Scope_Data
 from polyfriture.axis import Axis
 from polyfriture.colorBar import ColorBar
 from polyfriture.curve import Curve
-from polyfriture.playback.control import PlaybackControlWidget
-from polyfriture.playback.player import Player
 from polyfriture.plotCurve import PlotCurve
 from polyfriture.plotting.coordinateTransform import CoordinateTransform
 from polyfriture.plotting.scaleDivision import ScaleDivision, Tick
@@ -127,7 +124,6 @@ class Friture(QMainWindow, ):
         qmlRegisterType(Spectrum_Data, QML_MODULE, 1, 0, 'SpectrumData')
         qmlRegisterType(LevelData, QML_MODULE, 1, 0, 'LevelData')
         qmlRegisterType(LevelViewModel, QML_MODULE, 1, 0, 'LevelViewModel')
-        qmlRegisterType(PlaybackControlViewModel, QML_MODULE, 1, 0, 'PlaybackControlViewModel')
         qmlRegisterType(MainWindowViewModel, QML_MODULE, 1, 0, 'MainWindowViewModel')
         qmlRegisterType(MainToolbarViewModel, QML_MODULE, 1, 0, 'MainToolbarViewModel')
         qmlRegisterType(Axis, QML_MODULE, 1, 0, 'Axis')
@@ -158,9 +154,6 @@ class Friture(QMainWindow, ):
         # Initialize the audio backend
         # signal containing new data from the audio callback thread, processed as numpy array
         AudioBackend().new_data_available.connect(self.audiobuffer.handle_new_data)
-
-        self.player = Player(self)
-        self.audiobuffer.new_data_available.connect(self.player.handle_new_data)
 
         # this timer is used to update widgets that just need to display as fast as they can
         self.display_timer = QtCore.QTimer()
@@ -197,8 +190,6 @@ class Friture(QMainWindow, ):
         self.level_widget.set_buffer(self.audiobuffer)
         self.audiobuffer.new_data_available.connect(self.level_widget.handle_new_data)
 
-        self.playback_widget = PlaybackControlWidget(self, self.player, self._main_window_view_model.playback_control_view_model)
-
         self.dockmanager = DockManager(self, self.main_tile_layout)
 
         # timer ticks
@@ -211,11 +202,8 @@ class Friture(QMainWindow, ):
         self._main_window_view_model.toolbar_view_model.new_dock_clicked.connect(self.dockmanager.new_dock)
         self._main_window_view_model.toolbar_view_model.settings_clicked.connect(self.settings_called)
         self._main_window_view_model.toolbar_view_model.about_clicked.connect(self.about_called)
-        self.playback_widget.recording_toggled.connect(self.timer_changed)
 
         # settings changes
-        self.settings_dialog.show_playback_changed.connect(self.show_playback_changed)
-        self.settings_dialog.history_length_changed.connect(self.player.set_history_seconds)
         self.settings_dialog.theme_preference_changed.connect(self.theme_manager.setThemePreference)
 
         # restore the settings and widgets geometries
@@ -245,9 +233,6 @@ class Friture(QMainWindow, ):
     # slot
     def settings_called(self):
         self.settings_dialog.show()
-
-    def show_playback_changed(self, show: bool) -> None:
-        self._main_window_view_model.playback_control_enabled = show
 
     # slot
     def about_called(self):
@@ -281,6 +266,10 @@ class Friture(QMainWindow, ):
     # method
     def migrateSettings(self):
         settings = application_settings()
+
+        # Playback has been removed; capture and analysis retain their buffers.
+        settings.remove("AudioBackend/showPlayback")
+        settings.remove("AudioBackend/historyLength")
 
         # 1. move the central widget to a normal dock
         if settings.contains("CentralWidget/type"):
@@ -340,32 +329,12 @@ class Friture(QMainWindow, ):
             self.logger.info("Timer stop")
             self.display_timer.stop()
             self._main_window_view_model.toolbar_view_model.recording = False
-            self.playback_widget.stop_recording()
             AudioBackend().pause()
             self.dockmanager.pause()
         else:
             self.logger.info("Timer start")
             self.display_timer.start()
             self._main_window_view_model.toolbar_view_model.recording = True
-            self.playback_widget.start_recording()
-            AudioBackend().restart()
-            self.dockmanager.restart()
-
-    # slot
-    def timer_changed(self, recording: bool):
-        if not recording and self.display_timer.isActive():
-            self.logger.info("Timer stop")
-            self.display_timer.stop()
-            self._main_window_view_model.toolbar_view_model.recording = False
-            self.playback_widget.stop_recording()
-            AudioBackend().pause()
-            self.dockmanager.pause()
-
-        if recording and not self.display_timer.isActive():
-            self.logger.info("Timer start")
-            self.display_timer.start()
-            self._main_window_view_model.toolbar_view_model.recording = True
-            self.playback_widget.start_recording()
             AudioBackend().restart()
             self.dockmanager.restart()
 
