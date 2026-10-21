@@ -29,7 +29,7 @@ import logging.handlers
 
 from PyQt6 import QtCore
 # specifically import from PyQt6.QtGui and QWidgets for startup time improvement :
-from PyQt6.QtWidgets import QMainWindow, QApplication, QSplashScreen, QWidget
+from PyQt6.QtWidgets import QMainWindow, QApplication, QSplashScreen, QWidget, QMessageBox
 from PyQt6.QtGui import QPixmap, QFontDatabase, QGuiApplication
 from PyQt6.QtQml import QQmlEngine, qmlRegisterSingletonType, qmlRegisterType
 from PyQt6.QtCore import QObject
@@ -45,8 +45,8 @@ from polyfriture.about import About_Dialog  # About dialog
 from polyfriture.settings import Settings_Dialog  # Setting dialog
 from polyfriture.audiobuffer import AudioBuffer  # audio ring buffer class
 from polyfriture.audiobackend import AudioBackend  # audio backend class
-from polyfriture.dockmanager import DockManager, DockLayoutSettings
-from polyfriture.settings_model import IntSetting, SettingsModel, SettingsValueError, ValueSetting
+from polyfriture.dockmanager import DockManager
+from polyfriture.settings_model import SettingsModel, ValueSetting
 from polyfriture.tilelayout import TileLayout
 from polyfriture.level_view_model import LevelViewModel
 from polyfriture.level_data import LevelData
@@ -72,6 +72,7 @@ from polyfriture.generators.pink import Pink_Generator_Settings_View_Model
 from polyfriture.generators.sweep import Sweep_Generator_Settings_View_Model
 from polyfriture.generators.burst import Burst_Generator_Settings_View_Model
 from polyfriture.theme_manager import ThemeManager
+from polyfriture.settings_initialization import initialize_settings, SettingsInitializationError
 from polyfriture.application import (
     APPLICATION_DISPLAY_NAME,
     APPLICATION_ID,
@@ -272,87 +273,7 @@ class Friture(QMainWindow, ):
         settings.endGroup()
 
     # method
-    def migrateSettings(self):
-        settings = application_settings()
-
-        # Playback has been removed; capture and analysis retain their buffers.
-        settings.remove("AudioBackend/showPlayback")
-        settings.remove("AudioBackend/historyLength")
-
-        # Decode the layout through its owner before historical conversions.
-        # A malformed layout is recovered by normal restoration, not rewritten
-        # by a conversion that cannot interpret it.
-        try:
-            docknames = DockLayoutSettings.fields["dockNames"].coerce(
-                settings.value("Docks/dockNames", [])
-            )
-        except SettingsValueError as error:
-            self.logger.warning("Cannot convert historical dock layout: %s", error)
-            return
-
-        # 1. move the central widget to a normal dock
-        if settings.contains("CentralWidget/type"):
-            settings.beginGroup("CentralWidget")
-            centralWidgetKeys = settings.allKeys()
-            children = {key: settings.value(key) for key in centralWidgetKeys}
-            settings.endGroup()
-
-            if not settings.contains("Docks/central/type"):
-                # write them to a new dock instead
-                for key, value in children.items():
-                    settings.setValue("Docks/central/" + key, value)
-
-                # add the new dock name to dockNames
-                docknames = ["central"] + [name for name in docknames if name != "central"]
-                settings.setValue("Docks/dockNames", docknames)
-
-            settings.remove("CentralWidget")
-
-        # 2. remove retired level and delay widgets, preserving surviving IDs
-        if settings.contains("Docks/dockNames"):
-            newDockNames = []
-            for dockname in docknames:
-                try:
-                    widgetType = IntSetting(0).coerce(settings.value("Docks/" + dockname + "/type", 0))
-                except SettingsValueError:
-                    # The current panel settings owner will recover this ID.
-                    newDockNames.append(dockname)
-                    continue
-                if widgetType in (0, 6):
-                    settings.remove("Docks/" + dockname)
-                else:
-                    newDockNames.append(dockname)
-            settings.setValue("Docks/dockNames", newDockNames)
-
-        # Retired delay panels must not reappear when a closed dock is reopened.
-        if settings.contains("Docks/widgetIdStack"):
-            widget_stack = settings.value("Docks/widgetIdStack", [])
-            if widget_stack is None:
-                widget_stack = []
-            elif type(widget_stack) is int or isinstance(widget_stack, str):
-                widget_stack = [widget_stack]
-
-            def is_delay_widget(widget_id):
-                if type(widget_id) is int:
-                    return widget_id == 6
-                if isinstance(widget_id, str):
-                    try:
-                        return int(widget_id) == 6
-                    except ValueError:
-                        pass
-                return False
-
-            # Leave other representations untouched instead of interpreting malformed history.
-            if isinstance(widget_stack, list):
-                settings.setValue("Docks/widgetIdStack", [
-                    widget_id for widget_id in widget_stack if not is_delay_widget(widget_id)
-                ])
-        settings.remove("Docks/lastSettings/6")
-
-    # method
     def restoreAppState(self):
-        self.migrateSettings()
-
         settings = application_settings()
 
         settings.beginGroup("Docks")
@@ -499,6 +420,12 @@ def main():
 
     app = QApplication(remaining_arguments)
     configure_application(app)
+    try:
+        initialize_settings()
+    except SettingsInitializationError as error:
+        logger.exception("Cannot initialize application preferences")
+        QMessageBox.critical(None, APPLICATION_DISPLAY_NAME + " settings", str(error))
+        raise SystemExit(1) from error
 
     if platform.system() == "Darwin":
         logger.info("Applying Mac OS-specific setup")

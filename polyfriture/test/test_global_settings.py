@@ -1,17 +1,17 @@
 """Global preferences and panel structure validate before touching the UI."""
 
 from types import SimpleNamespace
-from unittest.mock import Mock
 
 from PyQt6.QtCore import QByteArray, QSettings, Qt
 from PyQt6.QtWidgets import QApplication, QMainWindow
 import pytest
 
-from polyfriture import analyzer, dockmanager, settings as settings_module, theme_manager
+from polyfriture import dockmanager, settings as settings_module, theme_manager
 from polyfriture.dock import DockSettings
 from polyfriture.defaults import DEFAULT_DOCKS
 from polyfriture.dockmanager import DockLayoutSettings, DockManager
 from polyfriture.settings import GlobalSettings, Settings_Dialog
+from polyfriture.settings_initialization import initialize_settings
 from polyfriture.settings_model import SettingsValueError
 from polyfriture.theme_manager import ThemeManager
 
@@ -194,14 +194,14 @@ def test_layout_roundtrip_preserves_explicitly_empty_grid_and_string_stack(profi
 
 @pytest.mark.parametrize("value", [1.5, 0.0, True, False, QByteArray(b"23"), {"old": 6}])
 def test_historical_cleanup_leaves_invalid_stack_types_for_owner_recovery(
-        profile, monkeypatch, value):
+        profile, tmp_path, value):
     profile.setValue("Docks/dockNames", [])
     profile.setValue("Docks/widgetIdStack", value)
     profile.setValue("Docks/lastSettings/6/delay_range", 4.5)
     profile.setValue("Docks/lastSettings/2/fftSize", 7)
-    monkeypatch.setattr(analyzer, "application_settings", lambda: profile)
-
-    analyzer.Friture.migrateSettings(SimpleNamespace(logger=Mock()))
+    source = QSettings(str(tmp_path / "empty-friture.ini"), QSettings.Format.IniFormat)
+    source.setFallbacksEnabled(False)
+    initialize_settings(profile, source)
 
     assert profile.value("Docks/widgetIdStack") == value
     assert not profile.contains("Docks/lastSettings/6/delay_range")

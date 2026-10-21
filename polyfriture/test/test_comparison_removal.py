@@ -8,11 +8,11 @@ import pytest
 from PyQt6.QtCore import QByteArray, QSettings
 from PyQt6.QtWidgets import QApplication, QWidget
 
-from polyfriture.analyzer import Friture
 from polyfriture.audiobuffer import AudioBuffer
 from polyfriture.audiobackend import SAMPLING_RATE
 from polyfriture.dockmanager import DockLayoutSettings, DockManager
 from polyfriture.spectrum import Spectrum_Widget
+from polyfriture.settings_initialization import initialize_settings
 from polyfriture.widgetdict import getWidgetById, widgetIds
 
 
@@ -21,9 +21,10 @@ def settings(tmp_path):
     return QSettings(str(tmp_path / "profile.ini"), QSettings.Format.IniFormat)
 
 
-def migrate(settings):
-    with patch("polyfriture.analyzer.application_settings", return_value=settings):
-        Friture.migrateSettings(None)
+def initialize_profile(settings):
+    source = QSettings(settings.fileName() + ".empty-friture", QSettings.Format.IniFormat)
+    source.setFallbacksEnabled(False)
+    initialize_settings(settings, source)
     settings.sync()
     assert settings.status() == QSettings.Status.NoError
 
@@ -42,7 +43,7 @@ def test_retired_panels_are_removed_without_changing_surviving_settings(settings
     settings.setValue("Docks/lastSettings/2/fftSize", 9)
     settings.setValue("unrelated", "preserved")
 
-    migrate(settings)
+    initialize_profile(settings)
 
     assert settings.value("Docks/dockNames") == ["scope", "levels", "pitch"]
     assert settings.value("Docks/widgetIdStack") == [7, 8, 2]
@@ -58,7 +59,7 @@ def test_retired_panels_are_removed_without_changing_surviving_settings(settings
     assert settings.value("unrelated") == "preserved"
 
     first_result = {key: settings.value(key) for key in settings.allKeys()}
-    migrate(settings)
+    initialize_profile(settings)
     assert {key: settings.value(key) for key in settings.allKeys()} == first_result
 
 
@@ -70,7 +71,7 @@ def test_retired_central_panel_is_removed_after_legacy_relocation(settings, widg
     settings.setValue("Docks/spectrum/type", 2)
     settings.setValue("Docks/spectrum/fftSize", 9)
 
-    migrate(settings)
+    initialize_profile(settings)
 
     assert settings.value("Docks/dockNames") == ["spectrum"]
     assert settings.value("Docks/spectrum/fftSize") == 9
@@ -83,7 +84,7 @@ def test_retired_legacy_central_panel_preserves_existing_central_panel(settings)
     settings.setValue("Docks/central/type", 7)
     settings.setValue("Docks/central/history_length", 600)
 
-    migrate(settings)
+    initialize_profile(settings)
 
     assert settings.value("Docks/dockNames") == ["central"]
     assert settings.value("Docks/central/type") == 7
@@ -103,7 +104,7 @@ def test_singleton_ini_dock_names_keep_surviving_panel(settings, central):
     loaded = QSettings(settings.fileName(), QSettings.Format.IniFormat)
     assert loaded.value("Docks/dockNames") == "spectrum"
 
-    migrate(loaded)
+    initialize_profile(loaded)
 
     assert loaded.value("Docks/dockNames") == ["spectrum"]
     assert loaded.value("Docks/spectrum/type") == 2
@@ -120,7 +121,7 @@ def test_historical_stack_encodings_remove_only_retired_widget(settings, stack, 
     settings.sync()
     loaded = QSettings(settings.fileName(), QSettings.Format.IniFormat)
 
-    migrate(loaded)
+    initialize_profile(loaded)
 
     assert loaded.value("Docks/widgetIdStack") == expected
 
@@ -131,7 +132,7 @@ def test_cleanup_preserves_unrecognized_stack_types_and_removes_retired_cache(se
     settings.setValue("Docks/lastSettings/6/delay_range", 4.5)
     settings.setValue("Docks/lastSettings/2/fftSize", 7)
 
-    migrate(settings)
+    initialize_profile(settings)
 
     assert settings.value("Docks/widgetIdStack") == stack
     assert not settings.contains("Docks/lastSettings/6/delay_range")
@@ -148,7 +149,7 @@ def test_all_retired_layout_restores_empty_without_substitute_panels(settings, c
     settings.setValue("Docks/widgetIdStack", [6])
     settings.setValue("Docks/lastSettings/6/delay_range", 4.5)
 
-    migrate(settings)
+    initialize_profile(settings)
 
     # Read the persisted representation, including QSettings' empty-list encoding.
     restored = QSettings(settings.fileName(), QSettings.Format.IniFormat)

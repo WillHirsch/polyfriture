@@ -26,6 +26,7 @@ def test_persistent_settings_use_fork_namespace_without_caller_metadata(monkeypa
 
         assert settings is store
         factory.assert_called_once_with("polyfriture", "polyfriture")
+        store.setFallbacksEnabled.assert_called_once_with(False)
     finally:
         QCoreApplication.setOrganizationName(previous_organization)
         QCoreApplication.setApplicationName(previous_application)
