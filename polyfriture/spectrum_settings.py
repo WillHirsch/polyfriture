@@ -51,12 +51,6 @@ class Spectrum_Settings_Dialog(QtWidgets.QDialog):
 
         self.formLayout = QtWidgets.QFormLayout(self)
 
-        self.comboBox_dual_channel = QtWidgets.QComboBox(self)
-        self.comboBox_dual_channel.setObjectName("dual")
-        self.comboBox_dual_channel.addItem("Single-channel")
-        self.comboBox_dual_channel.addItem("Dual-channel")
-        self.comboBox_dual_channel.setCurrentIndex(0)
-
         self.comboBox_fftsize = QtWidgets.QComboBox(self)
         self.comboBox_fftsize.setObjectName("comboBox_fftsize")
         self.comboBox_fftsize.addItem("32 points")
@@ -134,7 +128,6 @@ class Spectrum_Settings_Dialog(QtWidgets.QDialog):
         self.checkBox_showPitchLabel.setObjectName("showPitchLabels")
         self.checkBox_showPitchLabel.setChecked(DEFAULT_SHOW_PITCH_LABELS)
 
-        self.formLayout.addRow("Measurement type:", self.comboBox_dual_channel)
         self.formLayout.addRow("FFT Size:", self.comboBox_fftsize)
         self.formLayout.addRow("Frequency scale:", self.comboBox_freqscale)
         self.formLayout.addRow("Min frequency:", self.spinBox_minfreq)
@@ -148,7 +141,6 @@ class Spectrum_Settings_Dialog(QtWidgets.QDialog):
 
         self.setLayout(self.formLayout)
 
-        self.comboBox_dual_channel.currentIndexChanged.connect(self.dualchannelchanged)
         self.comboBox_fftsize.currentIndexChanged.connect(self.fftsizechanged)
         self.comboBox_freqscale.currentIndexChanged.connect(self.freqscalechanged)
         self.spinBox_minfreq.valueChanged.connect(self.view_model.setminfreq)
@@ -159,13 +151,6 @@ class Spectrum_Settings_Dialog(QtWidgets.QDialog):
         self.comboBox_response_time.currentIndexChanged.connect(self.responsetimechanged)
         self.checkBox_showFreqLabels.toggled.connect(self.view_model.setShowFreqLabel)
         self.checkBox_showPitchLabel.toggled.connect(self.view_model.setShowPitchLabel)
-
-    # slot
-    def dualchannelchanged(self, index):
-        if index == 0:
-            self.view_model.setdualchannels(False)
-        else:
-            self.view_model.setdualchannels(True)
 
     # slot
     def fftsizechanged(self, index):

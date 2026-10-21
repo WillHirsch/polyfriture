@@ -271,6 +271,11 @@ class Friture(QMainWindow, ):
         settings.remove("AudioBackend/showPlayback")
         settings.remove("AudioBackend/historyLength")
 
+        # INI files may represent a one-name list as a string or an empty list as None.
+        docknames = settings.value("Docks/dockNames", []) or []
+        if isinstance(docknames, str):
+            docknames = [docknames]
+
         # 1. move the central widget to a normal dock
         if settings.contains("CentralWidget/type"):
             settings.beginGroup("CentralWidget")
@@ -284,25 +289,46 @@ class Friture(QMainWindow, ):
                     settings.setValue("Docks/central/" + key, value)
 
                 # add the new dock name to dockNames
-                docknames = settings.value("Docks/dockNames", [])
                 docknames = ["central"] + docknames
                 settings.setValue("Docks/dockNames", docknames)
 
             settings.remove("CentralWidget")
 
-        # 2. remove any level widget
+        # 2. remove retired level and delay widgets, preserving surviving IDs
         if settings.contains("Docks/dockNames"):
-            docknames = settings.value("Docks/dockNames", [])
-            if docknames == None:
-            	docknames = []
             newDockNames = []
             for dockname in docknames:
                 widgetType = settings.value("Docks/" + dockname + "/type", 0, type=int)
-                if widgetType == 0:
+                if widgetType in (0, 6):
                     settings.remove("Docks/" + dockname)
                 else:
                     newDockNames.append(dockname)
             settings.setValue("Docks/dockNames", newDockNames)
+
+        # Retired delay panels must not reappear when a closed dock is reopened.
+        if settings.contains("Docks/widgetIdStack"):
+            widget_stack = settings.value("Docks/widgetIdStack", [])
+            if widget_stack is None:
+                widget_stack = []
+            elif type(widget_stack) is int or isinstance(widget_stack, str):
+                widget_stack = [widget_stack]
+
+            def is_delay_widget(widget_id):
+                if type(widget_id) is int:
+                    return widget_id == 6
+                if isinstance(widget_id, str):
+                    try:
+                        return int(widget_id) == 6
+                    except ValueError:
+                        pass
+                return False
+
+            # Leave other representations untouched instead of interpreting malformed history.
+            if isinstance(widget_stack, list):
+                settings.setValue("Docks/widgetIdStack", [
+                    widget_id for widget_id in widget_stack if not is_delay_widget(widget_id)
+                ])
+        settings.remove("Docks/lastSettings/6")
 
     # method
     def restoreAppState(self):

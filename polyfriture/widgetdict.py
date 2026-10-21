@@ -23,7 +23,6 @@ from polyfriture.spectrogram import Spectrogram_Widget
 from polyfriture.octavespectrum import OctaveSpectrum_Widget
 from polyfriture.scope import Scope_Widget
 from polyfriture.generator import Generator_Widget
-from polyfriture.delay_estimator import Delay_Estimator_Widget
 from polyfriture.longlevels import LongLevelWidget
 from polyfriture.pitch_tracker import PitchTrackerWidget
 
@@ -33,7 +32,6 @@ widgets = [
     {'Id': 3, "Class": Spectrogram_Widget, "Name": "2D Spectrogram"},
     {'Id': 4, "Class": OctaveSpectrum_Widget, "Name": "Octave Spectrum"},
     {'Id': 5, "Class": Generator_Widget, "Name": "Generator"},
-    {'Id': 6, "Class": Delay_Estimator_Widget, "Name": "Delay Estimator"},
     {'Id': 7, "Class": LongLevelWidget, "Name": "Long-time levels"},
     {'Id': 8, "Class": PitchTrackerWidget, "Name": "Pitch Tracker"},
 ]
