@@ -21,6 +21,8 @@
 import logging
 
 from PyQt6 import QtWidgets
+from polyfriture.settings_model import ChoiceSetting, FloatSetting, IntSetting, SettingsModel
+from polyfriture.settings_binding import bind_combobox, bind_spinbox
 from polyfriture.audiobackend import SAMPLING_RATE
 import polyfriture.plotting.frequency_scales as fscales
 
@@ -35,10 +37,24 @@ DEFAULT_TIMERANGE = 10.
 DEFAULT_WEIGHTING = 0  # None
 
 
+class SpectrogramSettings(SettingsModel):
+    fields = {
+        "timeRange": FloatSetting(DEFAULT_TIMERANGE, minimum=0.1, maximum=1000.0),
+        "fftSize": ChoiceSetting(DEFAULT_FFT_SIZE, labels=tuple(f"{2 ** exponent} points" for exponent in range(5, 15))),
+        "freqScale": ChoiceSetting(DEFAULT_FREQ_SCALE, labels=tuple(scale.NAME for scale in fscales.ALL)),
+        "freqMin": IntSetting(DEFAULT_MINFREQ, minimum=20, maximum=SAMPLING_RATE // 2),
+        "freqMax": IntSetting(int(DEFAULT_MAXFREQ), minimum=20, maximum=SAMPLING_RATE // 2),
+        "colorMin": IntSetting(DEFAULT_SPEC_MIN, minimum=-200, maximum=200),
+        "colorMax": IntSetting(DEFAULT_SPEC_MAX, minimum=-200, maximum=200),
+        "weighting": ChoiceSetting(DEFAULT_WEIGHTING, labels=("None", "A", "B", "C")),
+    }
+
+
 class Spectrogram_Settings_Dialog(QtWidgets.QDialog):
 
     def __init__(self, parent, view_model):
         super().__init__(parent)
+        self.model = SpectrogramSettings()
 
         self.logger = logging.getLogger(__name__)
 
@@ -50,71 +66,37 @@ class Spectrogram_Settings_Dialog(QtWidgets.QDialog):
 
         self.doubleSpinBox_timerange = QtWidgets.QDoubleSpinBox(self)
         self.doubleSpinBox_timerange.setDecimals(1)
-        self.doubleSpinBox_timerange.setMinimum(0.1)
-        self.doubleSpinBox_timerange.setMaximum(1000.0)
-        self.doubleSpinBox_timerange.setProperty("value", DEFAULT_TIMERANGE)
         self.doubleSpinBox_timerange.setObjectName("doubleSpinBox_timerange")
         self.doubleSpinBox_timerange.setSuffix(" s")
 
         self.comboBox_fftsize = QtWidgets.QComboBox(self)
         self.comboBox_fftsize.setObjectName("comboBox_fftsize")
-        self.comboBox_fftsize.addItem("32 points")
-        self.comboBox_fftsize.addItem("64 points")
-        self.comboBox_fftsize.addItem("128 points")
-        self.comboBox_fftsize.addItem("256 points")
-        self.comboBox_fftsize.addItem("512 points")
-        self.comboBox_fftsize.addItem("1024 points")
-        self.comboBox_fftsize.addItem("2048 points")
-        self.comboBox_fftsize.addItem("4096 points")
-        self.comboBox_fftsize.addItem("8192 points")
-        self.comboBox_fftsize.addItem("16384 points")
-        self.comboBox_fftsize.setCurrentIndex(DEFAULT_FFT_SIZE)
 
         self.comboBox_freqscale = QtWidgets.QComboBox(self)
         self.comboBox_freqscale.setObjectName("comboBox_freqscale")
-        for scale in fscales.ALL:
-            self.comboBox_freqscale.addItem(scale.NAME)
-        self.comboBox_freqscale.setCurrentIndex(DEFAULT_FREQ_SCALE)
 
         self.spinBox_minfreq = QtWidgets.QSpinBox(self)
-        self.spinBox_minfreq.setMinimum(20)
-        self.spinBox_minfreq.setMaximum(SAMPLING_RATE // 2)
         self.spinBox_minfreq.setSingleStep(10)
-        self.spinBox_minfreq.setValue(DEFAULT_MINFREQ)
         self.spinBox_minfreq.setObjectName("spinBox_minfreq")
         self.spinBox_minfreq.setSuffix(" Hz")
 
         self.spinBox_maxfreq = QtWidgets.QSpinBox(self)
-        self.spinBox_maxfreq.setMinimum(20)
-        self.spinBox_maxfreq.setMaximum(SAMPLING_RATE // 2)
         self.spinBox_maxfreq.setSingleStep(1000)
-        self.spinBox_maxfreq.setProperty("value", DEFAULT_MAXFREQ)
         self.spinBox_maxfreq.setObjectName("spinBox_maxfreq")
         self.spinBox_maxfreq.setSuffix(" Hz")
 
         self.spinBox_specmin = QtWidgets.QSpinBox(self)
         self.spinBox_specmin.setKeyboardTracking(False)
-        self.spinBox_specmin.setMinimum(-200)
-        self.spinBox_specmin.setMaximum(200)
-        self.spinBox_specmin.setProperty("value", DEFAULT_SPEC_MIN)
         self.spinBox_specmin.setObjectName("spinBox_specmin")
         self.spinBox_specmin.setSuffix(" dB")
 
         self.spinBox_specmax = QtWidgets.QSpinBox(self)
         self.spinBox_specmax.setKeyboardTracking(False)
-        self.spinBox_specmax.setMinimum(-200)
-        self.spinBox_specmax.setMaximum(200)
-        self.spinBox_specmax.setProperty("value", DEFAULT_SPEC_MAX)
         self.spinBox_specmax.setObjectName("spinBox_specmax")
         self.spinBox_specmax.setSuffix(" dB")
 
         self.comboBox_weighting = QtWidgets.QComboBox(self)
         self.comboBox_weighting.setObjectName("weighting")
-        self.comboBox_weighting.addItem("None")
-        self.comboBox_weighting.addItem("A")
-        self.comboBox_weighting.addItem("B")
-        self.comboBox_weighting.addItem("C")
-        self.comboBox_weighting.setCurrentIndex(DEFAULT_WEIGHTING)
 
         self.formLayout.addRow("Time range:", self.doubleSpinBox_timerange)
         self.formLayout.addRow("FFT Size:", self.comboBox_fftsize)
@@ -127,14 +109,14 @@ class Spectrogram_Settings_Dialog(QtWidgets.QDialog):
 
         self.setLayout(self.formLayout)
 
-        self.comboBox_fftsize.currentIndexChanged.connect(self.fftsizechanged)
-        self.comboBox_freqscale.currentIndexChanged.connect(self.freqscalechanged)
-        self.spinBox_minfreq.valueChanged.connect(view_model.setminfreq)
-        self.spinBox_maxfreq.valueChanged.connect(view_model.setmaxfreq)
-        self.spinBox_specmin.valueChanged.connect(view_model.setmin)
-        self.spinBox_specmax.valueChanged.connect(view_model.setmax)
-        self.doubleSpinBox_timerange.valueChanged.connect(view_model.timerangechanged)
-        self.comboBox_weighting.currentIndexChanged.connect(view_model.setweighting)
+        bind_combobox(self.comboBox_fftsize, self.model, "fftSize", self.fftsizechanged)
+        bind_combobox(self.comboBox_freqscale, self.model, "freqScale", self.freqscalechanged)
+        bind_spinbox(self.spinBox_minfreq, self.model, "freqMin", view_model.setminfreq)
+        bind_spinbox(self.spinBox_maxfreq, self.model, "freqMax", view_model.setmaxfreq)
+        bind_spinbox(self.spinBox_specmin, self.model, "colorMin", view_model.setmin)
+        bind_spinbox(self.spinBox_specmax, self.model, "colorMax", view_model.setmax)
+        bind_spinbox(self.doubleSpinBox_timerange, self.model, "timeRange", view_model.timerangechanged)
+        bind_combobox(self.comboBox_weighting, self.model, "weighting", view_model.setweighting)
 
     # slot
     def fftsizechanged(self, index):
@@ -146,33 +128,18 @@ class Spectrogram_Settings_Dialog(QtWidgets.QDialog):
     def freqscalechanged(self, index):
         self.logger.info("freq_scale slot %d %s", index, fscales.ALL[index])
         self.view_model.setfreqscale(fscales.ALL[index])
-        
-    # method
-    def saveState(self, settings):
-        settings.setValue("timeRange", self.doubleSpinBox_timerange.value())
-        settings.setValue("fftSize", self.comboBox_fftsize.currentIndex())
-        settings.setValue("freqScale", self.comboBox_freqscale.currentIndex())
-        settings.setValue("freqMin", self.spinBox_minfreq.value())
-        settings.setValue("freqMax", self.spinBox_maxfreq.value())
-        settings.setValue("colorMin", self.spinBox_specmin.value())
-        settings.setValue("colorMax", self.spinBox_specmax.value())
-        settings.setValue("weighting", self.comboBox_weighting.currentIndex())
 
     # method
+    def saveState(self, settings):
+        self.model.save(settings)
+
     def restoreState(self, settings):
-        timeRange = settings.value("timeRange", DEFAULT_TIMERANGE, type=float)
-        self.doubleSpinBox_timerange.setValue(timeRange)
-        fft_size = settings.value("fftSize", DEFAULT_FFT_SIZE, type=int)  # 7th index is 1024 points
-        self.comboBox_fftsize.setCurrentIndex(fft_size)
-        freqscale = settings.value("freqScale", DEFAULT_FREQ_SCALE, type=int)
-        self.comboBox_freqscale.setCurrentIndex(freqscale)
-        freqMin = settings.value("freqMin", DEFAULT_MINFREQ, type=int)
-        self.spinBox_minfreq.setValue(freqMin)
-        freqMax = settings.value("freqMax", DEFAULT_MAXFREQ, type=int)
-        self.spinBox_maxfreq.setValue(freqMax)
-        colorMin = settings.value("colorMin", DEFAULT_SPEC_MIN, type=int)
-        self.spinBox_specmin.setValue(colorMin)
-        colorMax = settings.value("colorMax", DEFAULT_SPEC_MAX, type=int)
-        self.spinBox_specmax.setValue(colorMax)
-        weighting = settings.value("weighting", DEFAULT_WEIGHTING, type=int)
-        self.comboBox_weighting.setCurrentIndex(weighting)
+        self.model.restore(settings)
+        self.doubleSpinBox_timerange.setValue(self.model.get("timeRange"))
+        self.comboBox_fftsize.setCurrentIndex(self.model.get("fftSize"))
+        self.comboBox_freqscale.setCurrentIndex(self.model.get("freqScale"))
+        self.spinBox_minfreq.setValue(self.model.get("freqMin"))
+        self.spinBox_maxfreq.setValue(self.model.get("freqMax"))
+        self.spinBox_specmin.setValue(self.model.get("colorMin"))
+        self.spinBox_specmax.setValue(self.model.get("colorMax"))
+        self.comboBox_weighting.setCurrentIndex(self.model.get("weighting"))

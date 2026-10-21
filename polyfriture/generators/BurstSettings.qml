@@ -18,7 +18,7 @@ Row {
         binding: root.settingsViewModel.period
         onDecimalValueModified: root.settingsViewModel.period = decimalValue
         suffix: " s"
-        decimalFrom: 0.01
-        decimalTo: 60
+        decimalFrom: root.settingsViewModel.periodMinimum
+        decimalTo: root.settingsViewModel.periodMaximum
     }
 }

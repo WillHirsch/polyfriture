@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # Copyright (C) 2009 Timothée Lecomte
+# Copyright (C) 2026 Will Hirsch
 
 # This file is part of Friture.
 #
@@ -17,12 +18,30 @@
 # You should have received a copy of the GNU General Public License
 # along with Friture.  If not, see <http://www.gnu.org/licenses/>.
 
+import logging
+from typing import Any, Mapping
+
 import numpy as np
 from PyQt6.QtCore import QObject, pyqtProperty, pyqtSignal  # type: ignore
+from polyfriture.settings_model import FloatSetting, SettingsModel, SettingsValueError
 
 DEFAULT_SWEEP_STARTFREQUENCY = 20.
 DEFAULT_SWEEP_STOPFREQUENCY = 22000.
 DEFAULT_SWEEP_PERIOD_S = 1.
+
+
+class SweepSettings(SettingsModel):
+    fields = {
+        "sweep start frequency": FloatSetting(DEFAULT_SWEEP_STARTFREQUENCY, minimum=20., maximum=22000.),
+        "sweep stop frequency": FloatSetting(DEFAULT_SWEEP_STOPFREQUENCY, minimum=20., maximum=22000.),
+        "sweep period": FloatSetting(DEFAULT_SWEEP_PERIOD_S, minimum=0.01, maximum=60.),
+    }
+
+    def validate(self, values: Mapping[str, Any]) -> None:
+        if values["sweep start frequency"] == values["sweep stop frequency"]:
+            raise SettingsValueError(
+                "sweep endpoints must differ",
+                keys=("sweep start frequency", "sweep stop frequency"))
 
 
 class SweepGenerator:
@@ -106,46 +125,81 @@ class Sweep_Generator_Settings_View_Model(QObject):
 
     def __init__(self, parent: QObject):
         super().__init__(parent)
-        self._start_frequency = DEFAULT_SWEEP_STARTFREQUENCY
-        self._stop_frequency = DEFAULT_SWEEP_STOPFREQUENCY
-        self._period = DEFAULT_SWEEP_PERIOD_S
+        self.settings = SweepSettings()
 
     @pyqtProperty(float, notify=start_frequency_changed)
     def start_frequency(self) -> float:
-        return self._start_frequency
+        return self.settings.get("sweep start frequency")
 
     @start_frequency.setter # type: ignore
     def start_frequency(self, frequency: float):
-        if self._start_frequency != frequency:
-            self._start_frequency = frequency
-            self.start_frequency_changed.emit(frequency)
+        self._set("sweep start frequency", frequency, self.start_frequency_changed)
 
     @pyqtProperty(float, notify=stop_frequency_changed)
     def stop_frequency(self) -> float:
-        return self._stop_frequency
+        return self.settings.get("sweep stop frequency")
     
     @stop_frequency.setter # type: ignore
     def stop_frequency(self, frequency: float):
-        if self._stop_frequency != frequency:
-            self._stop_frequency = frequency
-            self.stop_frequency_changed.emit(frequency)
+        self._set("sweep stop frequency", frequency, self.stop_frequency_changed)
 
     @pyqtProperty(float, notify=peiod_changed)
     def period(self) -> float:
-        return self._period
+        return self.settings.get("sweep period")
     
     @period.setter # type: ignore
     def period(self, period: float):
-        if self._period != period:
-            self._period = period
-            self.peiod_changed.emit(period)
+        self._set("sweep period", period, self.peiod_changed)
+
+    def _set(self, key, value, signal):
+        previous = self.settings.get(key)
+        try:
+            self.settings.set(key, value)
+        except SettingsValueError as error:
+            logging.getLogger(__name__).warning("Ignoring invalid sweep setting: %s", error)
+            return
+        current = self.settings.get(key)
+        if previous != current:
+            signal.emit(current)
+
+    @pyqtProperty(float, constant=True)
+    def startFrequencyMinimum(self):
+        return self.settings.fields["sweep start frequency"].minimum
+
+    @pyqtProperty(float, constant=True)
+    def startFrequencyMaximum(self):
+        return self.settings.fields["sweep start frequency"].maximum
+
+    @pyqtProperty(float, constant=True)
+    def stopFrequencyMinimum(self):
+        return self.settings.fields["sweep stop frequency"].minimum
+
+    @pyqtProperty(float, constant=True)
+    def stopFrequencyMaximum(self):
+        return self.settings.fields["sweep stop frequency"].maximum
+
+    @pyqtProperty(float, constant=True)
+    def periodMinimum(self):
+        return self.settings.fields["sweep period"].minimum
+
+    @pyqtProperty(float, constant=True)
+    def periodMaximum(self):
+        return self.settings.fields["sweep period"].maximum
 
     def saveState(self, settings):
-        settings.setValue("sweep start frequency", self.start_frequency)
-        settings.setValue("sweep stop frequency", self.stop_frequency)
-        settings.setValue("sweep period", self.period)
+        self.settings.save(settings)
 
     def restoreState(self, settings):
-        self.start_frequency = settings.value("sweep start frequency", DEFAULT_SWEEP_STARTFREQUENCY, type=float)
-        self.stop_frequency = settings.value("sweep stop frequency", DEFAULT_SWEEP_STOPFREQUENCY, type=float)
-        self.period = settings.value("sweep period", DEFAULT_SWEEP_PERIOD_S, type=float)
+        changes = (
+            ("sweep start frequency", self.start_frequency_changed),
+            ("sweep stop frequency", self.stop_frequency_changed),
+            ("sweep period", self.peiod_changed),
+        )
+        previous = {key: self.settings.get(key) for key, _ in changes}
+        # Commit the complete validated candidate before any observer can
+        # recompute DSP parameters from a partially restored profile.
+        self.settings.restore(settings)
+        for key, signal in changes:
+            current = self.settings.get(key)
+            if previous[key] != current:
+                signal.emit(current)

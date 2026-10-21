@@ -30,6 +30,7 @@ from polyfriture.generators.sine import SineGenerator, Sine_Generator_Settings_V
 from polyfriture.generators.burst import BurstGenerator, Burst_Generator_Settings_View_Model
 from polyfriture.generators.pink import PinkGenerator, Pink_Generator_Settings_View_Model
 from polyfriture.generators.white import WhiteGenerator, White_Generator_Settings_View_Model
+from polyfriture.settings_model import ChoiceSetting, SettingsModel, SettingsValueError, ValueSetting
 
 SMOOTH_DISPLAY_TIMER_PERIOD_MS = 25
 FRAMES_PER_BUFFER = 2 * 1024
@@ -37,6 +38,20 @@ DEFAULT_GENERATOR_KIND_INDEX = 0
 RAMP_LENGTH = 3e-3  # 10 ms
 
 (STOPPED, STARTING, PLAYING, STOPPING) = list(range(0, 4))
+
+GENERATOR_TYPES = (SineGenerator, WhiteGenerator, PinkGenerator, SweepGenerator, BurstGenerator)
+
+
+class GeneratorSettings(SettingsModel):
+    fields = {
+        "generator kind": ChoiceSetting(
+            DEFAULT_GENERATOR_KIND_INDEX,
+            labels=tuple(generator.name for generator in GENERATOR_TYPES)),
+    }
+
+
+class GeneratorDeviceSettings(SettingsModel):
+    fields = {"deviceName": ValueSetting("")}
 
 
 class Generator_Widget(QObject):
@@ -50,12 +65,7 @@ class Generator_Widget(QObject):
 
         self.audiobuffer = None
 
-        self.generators = []
-        self.generators.append(SineGenerator(parent))
-        self.generators.append(WhiteGenerator(parent))
-        self.generators.append(PinkGenerator(parent))
-        self.generators.append(SweepGenerator(parent))
-        self.generators.append(BurstGenerator(parent))
+        self.generators = [generator(parent) for generator in GENERATOR_TYPES]
 
         self._view_model = Generator_View_Model(parent, self.generators)
         self._view_model.stateChanged.connect(self.start_stop_button_toggle)
@@ -259,7 +269,7 @@ class Generator_Widget(QObject):
         return
 
     def saveState(self, settings):
-        settings.setValue("generator kind", self._view_model.generatorIndex)
+        self._view_model.saveState(settings)
 
         for generator in self.generators:
             generator.view_model().saveState(settings)
@@ -267,7 +277,7 @@ class Generator_Widget(QObject):
         self.settings_dialog.saveState(settings)
 
     def restoreState(self, settings):
-        self._view_model.generatorIndex = settings.value("generator kind", DEFAULT_GENERATOR_KIND_INDEX, type=int)
+        self._view_model.restoreState(settings)
 
         for generator in self.generators:
             generator.view_model().restoreState(settings)
@@ -282,23 +292,38 @@ class Generator_View_Model(QObject):
         super().__init__(parent)
 
         self._generators = generators
-        self._generatorIndex = DEFAULT_GENERATOR_KIND_INDEX
+        self.settings = GeneratorSettings()
         self._generator = generators[DEFAULT_GENERATOR_KIND_INDEX]
         self._state = STOPPED
 
     @pyqtProperty(list, constant=True) # type: ignore
     def generatorNames(self):
-        return [generator.name for generator in self._generators]
+        return list(self.settings.fields["generator kind"].labels)
 
     @pyqtProperty(int, notify=generatorChanged)
     def generatorIndex(self):
-        return self._generatorIndex
+        return self.settings.get("generator kind")
     
     @generatorIndex.setter # type: ignore
     def generatorIndex(self, generatorIndex):
-        if self._generatorIndex != generatorIndex:
-            self._generatorIndex = generatorIndex
-            self._generator = self._generators[generatorIndex]
+        previous = self.generatorIndex
+        try:
+            self.settings.set("generator kind", generatorIndex)
+        except SettingsValueError as error:
+            logging.getLogger(__name__).warning("Ignoring invalid generator kind: %s", error)
+            return
+        if previous != self.generatorIndex:
+            self._generator = self._generators[self.generatorIndex]
+            self.generatorChanged.emit()
+
+    def saveState(self, settings):
+        self.settings.save(settings)
+
+    def restoreState(self, settings):
+        previous = self.generatorIndex
+        self.settings.restore(settings)
+        self._generator = self._generators[self.generatorIndex]
+        if previous != self.generatorIndex:
             self.generatorChanged.emit()
 
     @pyqtProperty(QObject, constant=True) # type: ignore
@@ -337,6 +362,8 @@ class Generator_Settings_Dialog(QtWidgets.QDialog):
     def __init__(self, parent, devices, device_index):
         super().__init__(parent)
 
+        self.settings = GeneratorDeviceSettings()
+
         self.setWindowTitle("Generator settings")
 
         self.form_layout = QtWidgets.QFormLayout(self)
@@ -357,10 +384,12 @@ class Generator_Settings_Dialog(QtWidgets.QDialog):
     def saveState(self, settings):
         # for the output device, we search by name instead of index, since
         # we do not know if the device order stays the same between sessions
-        settings.setValue("deviceName", self.combobox_output_device.currentText())
+        self.settings.set("deviceName", self.combobox_output_device.currentText())
+        self.settings.save(settings)
 
     def restoreState(self, settings):
-        device_name = settings.value("deviceName", "")
+        self.settings.restore(settings)
+        device_name = self.settings.get("deviceName")
         device_index = self.combobox_output_device.findText(device_name)
         # change the device only if it exists in the device list
         if device_index >= 0:
