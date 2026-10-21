@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import QApplication, QWidget
 from polyfriture.analyzer import Friture
 from polyfriture.audiobuffer import AudioBuffer
 from polyfriture.audiobackend import SAMPLING_RATE
-from polyfriture.dockmanager import DockManager
+from polyfriture.dockmanager import DockLayoutSettings, DockManager
 from polyfriture.spectrum import Spectrum_Widget
 from polyfriture.widgetdict import getWidgetById, widgetIds
 
@@ -153,7 +153,8 @@ def test_all_retired_layout_restores_empty_without_substitute_panels(settings, c
     # Read the persisted representation, including QSettings' empty-list encoding.
     restored = QSettings(settings.fileName(), QSettings.Format.IniFormat)
     restored.beginGroup("Docks")
-    manager = SimpleNamespace(docks=[], last_widget_stack=[], last_settings={}, logger=Mock())
+    manager = SimpleNamespace(docks=[], last_widget_stack=[], last_settings={}, logger=Mock(),
+                              settings_model=DockLayoutSettings())
     with patch("polyfriture.dockmanager.Dock") as dock:
         DockManager.restoreState(manager, restored)
         dock.assert_not_called()

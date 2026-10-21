@@ -21,8 +21,21 @@
 import logging
 
 from polyfriture.application import application_settings
+from polyfriture.settings_model import EnumSetting, SettingsModel, SettingsValueError
 from PyQt6.QtCore import QObject, pyqtProperty, pyqtSignal, pyqtSlot, Qt  # type: ignore
 from PyQt6.QtGui import QGuiApplication  # type: ignore
+
+
+THEME_LABELS = {
+    Qt.ColorScheme.Unknown: "System",
+    Qt.ColorScheme.Light: "Light",
+    Qt.ColorScheme.Dark: "Dark",
+}
+THEME_SETTING = EnumSetting(Qt.ColorScheme.Unknown, labels=THEME_LABELS)
+
+
+class ThemeSettings(SettingsModel):
+    fields = {"themePreference": THEME_SETTING}
 
 
 class ThemeManager(QObject):
@@ -36,6 +49,7 @@ class ThemeManager(QObject):
         self._logger = logging.getLogger(__name__)
 
         self._theme_preference = Qt.ColorScheme.Unknown  # Light, Dark, or Unknown (System)
+        self.settings_model = ThemeSettings()
 
         self._style_hints = QGuiApplication.styleHints()
 
@@ -48,13 +62,14 @@ class ThemeManager(QObject):
     def _load_settings(self):
         settings = application_settings()
         # 0 = System (Unknown), 1 = Light, 2 = Dark
-        saved = settings.value("themePreference", 0, type=int)
+        self.settings_model.restore(settings)
+        saved = self.settings_model.get("themePreference")
         self._theme_preference = Qt.ColorScheme(saved)
         self._logger.info("Loaded theme preference: %s", self._theme_preference.name)
 
     def _save_settings(self):
         settings = application_settings()
-        settings.setValue("themePreference", int(self._theme_preference.value))
+        self.settings_model.save(settings)
         self._logger.info("Saved theme preference: %s", self._theme_preference.name)
 
     def _apply_theme_preference(self):
@@ -66,15 +81,19 @@ class ThemeManager(QObject):
     @pyqtProperty(int, notify=theme_changed)  # type: ignore
     def themePreference(self) -> int:
         """Current theme preference: 0=System, 1=Light, 2=Dark"""
-        return int(self._theme_preference)
+        return int(self._theme_preference.value)
 
     @pyqtSlot(int)
     def setThemePreference(self, theme: int):
         """Set theme preference from QML (0=System, 1=Light, 2=Dark)."""
-        new_preference = Qt.ColorScheme(theme)
+        try:
+            new_preference = Qt.ColorScheme(self.settings_model.set("themePreference", theme))
+        except SettingsValueError as error:
+            self._logger.warning("Ignoring invalid theme assignment: %s", error)
+            return
         if new_preference != self._theme_preference:
             self._theme_preference = new_preference
             self._save_settings()
             self._apply_theme_preference()
-            self.theme_changed.emit(int(new_preference.value))
+            self.theme_changed.emit(self.settings_model.get("themePreference"))
             self._logger.info("Theme preference changed to: %s", new_preference.name)

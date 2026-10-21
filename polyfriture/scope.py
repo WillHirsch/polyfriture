@@ -21,6 +21,8 @@
 import logging
 
 from PyQt6 import QtWidgets
+from polyfriture.settings_model import FloatSetting, SettingsModel
+from polyfriture.settings_binding import bind_spinbox
 from PyQt6.QtCore import QObject
 
 from numpy import log10, where, sign, arange, zeros
@@ -65,7 +67,7 @@ class Scope_Widget(QObject):
         self.time = zeros(10)
         self.y = zeros(10)
         self.y2 = zeros(10)
-    
+
     def qml_file_name(self):
         return "Scope.qml"
 
@@ -161,10 +163,17 @@ class Scope_Widget(QObject):
         self.settings_dialog.restoreState(settings)
 
 
+class ScopeSettings(SettingsModel):
+    fields = {
+        "timeRange": FloatSetting(DEFAULT_TIMERANGE, minimum=0.1, maximum=10000.0),
+    }
+
+
 class Scope_Settings_Dialog(QtWidgets.QDialog):
 
     def __init__(self, parent, view_model):
         super().__init__(parent)
+        self.model = ScopeSettings()
 
         self.setWindowTitle("Scope settings")
 
@@ -172,9 +181,6 @@ class Scope_Settings_Dialog(QtWidgets.QDialog):
 
         self.doubleSpinBox_timerange = QtWidgets.QDoubleSpinBox(self)
         self.doubleSpinBox_timerange.setDecimals(1)
-        self.doubleSpinBox_timerange.setMinimum(0.1)
-        self.doubleSpinBox_timerange.setMaximum(10000.0)
-        self.doubleSpinBox_timerange.setProperty("value", DEFAULT_TIMERANGE)
         self.doubleSpinBox_timerange.setObjectName("doubleSpinBox_timerange")
         self.doubleSpinBox_timerange.setSuffix(" ms")
 
@@ -182,13 +188,12 @@ class Scope_Settings_Dialog(QtWidgets.QDialog):
 
         self.setLayout(self.formLayout)
 
-        self.doubleSpinBox_timerange.valueChanged.connect(view_model.set_timerange)
+        bind_spinbox(self.doubleSpinBox_timerange, self.model, "timeRange", view_model.set_timerange)
 
     # method
     def saveState(self, settings):
-        settings.setValue("timeRange", self.doubleSpinBox_timerange.value())
+        self.model.save(settings)
 
-    # method
     def restoreState(self, settings):
-        timeRange = settings.value("timeRange", DEFAULT_TIMERANGE, type=float)
-        self.doubleSpinBox_timerange.setValue(timeRange)
+        self.model.restore(settings)
+        self.doubleSpinBox_timerange.setValue(self.model.get("timeRange"))

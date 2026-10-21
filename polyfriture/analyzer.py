@@ -45,7 +45,8 @@ from polyfriture.about import About_Dialog  # About dialog
 from polyfriture.settings import Settings_Dialog  # Setting dialog
 from polyfriture.audiobuffer import AudioBuffer  # audio ring buffer class
 from polyfriture.audiobackend import AudioBackend  # audio backend class
-from polyfriture.dockmanager import DockManager
+from polyfriture.dockmanager import DockManager, DockLayoutSettings
+from polyfriture.settings_model import IntSetting, SettingsModel, SettingsValueError, ValueSetting
 from polyfriture.tilelayout import TileLayout
 from polyfriture.level_view_model import LevelViewModel
 from polyfriture.level_data import LevelData
@@ -92,6 +93,13 @@ SMOOTH_DISPLAY_TIMER_PERIOD_MS = 10
 # Text has to be refreshed slowly in order to be readable.
 # (and text painting is costly)
 SLOW_TIMER_PERIOD_MS = 1000
+
+
+class WindowSettings(SettingsModel):
+    fields = {
+        "windowGeometry": ValueSetting(QtCore.QByteArray()),
+        "windowState": ValueSetting(QtCore.QByteArray()),
+    }
 
 
 class Friture(QMainWindow, ):
@@ -271,10 +279,16 @@ class Friture(QMainWindow, ):
         settings.remove("AudioBackend/showPlayback")
         settings.remove("AudioBackend/historyLength")
 
-        # INI files may represent a one-name list as a string or an empty list as None.
-        docknames = settings.value("Docks/dockNames", []) or []
-        if isinstance(docknames, str):
-            docknames = [docknames]
+        # Decode the layout through its owner before historical conversions.
+        # A malformed layout is recovered by normal restoration, not rewritten
+        # by a conversion that cannot interpret it.
+        try:
+            docknames = DockLayoutSettings.fields["dockNames"].coerce(
+                settings.value("Docks/dockNames", [])
+            )
+        except SettingsValueError as error:
+            self.logger.warning("Cannot convert historical dock layout: %s", error)
+            return
 
         # 1. move the central widget to a normal dock
         if settings.contains("CentralWidget/type"):
@@ -289,7 +303,7 @@ class Friture(QMainWindow, ):
                     settings.setValue("Docks/central/" + key, value)
 
                 # add the new dock name to dockNames
-                docknames = ["central"] + docknames
+                docknames = ["central"] + [name for name in docknames if name != "central"]
                 settings.setValue("Docks/dockNames", docknames)
 
             settings.remove("CentralWidget")
@@ -298,7 +312,12 @@ class Friture(QMainWindow, ):
         if settings.contains("Docks/dockNames"):
             newDockNames = []
             for dockname in docknames:
-                widgetType = settings.value("Docks/" + dockname + "/type", 0, type=int)
+                try:
+                    widgetType = IntSetting(0).coerce(settings.value("Docks/" + dockname + "/type", 0))
+                except SettingsValueError:
+                    # The current panel settings owner will recover this ID.
+                    newDockNames.append(dockname)
+                    continue
                 if widgetType in (0, 6):
                     settings.remove("Docks/" + dockname)
                 else:
@@ -341,8 +360,10 @@ class Friture(QMainWindow, ):
         settings.endGroup()
 
         settings.beginGroup("MainWindow")
-        self.restoreGeometry(settings.value("windowGeometry", type=QtCore.QByteArray))
-        self.restoreState(settings.value("windowState", type=QtCore.QByteArray))
+        window_settings = WindowSettings()
+        window_settings.restore(settings)
+        self.restoreGeometry(window_settings.get("windowGeometry"))
+        self.restoreState(window_settings.get("windowState"))
         settings.endGroup()
 
         settings.beginGroup("AudioBackend")
