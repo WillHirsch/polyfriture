@@ -18,11 +18,21 @@
 # You should have received a copy of the GNU General Public License
 # along with Friture.  If not, see <http://www.gnu.org/licenses/>.
 
+import logging
+
 import numpy as np
 from polyfriture.audiobackend import SAMPLING_RATE
 from PyQt6.QtCore import QObject, pyqtProperty, pyqtSignal  # type: ignore
+from polyfriture.settings_model import FloatSetting, SettingsModel, SettingsValueError
 
 DEFAULT_BURST_PERIOD_S = 1.
+
+
+class BurstSettings(SettingsModel):
+    fields = {
+        "burst period": FloatSetting(DEFAULT_BURST_PERIOD_S, minimum=0.01, maximum=60.),
+    }
+
 
 class BurstGenerator:
     name = "Burst"
@@ -54,21 +64,36 @@ class Burst_Generator_Settings_View_Model(QObject):
 
     def __init__(self, parent: QObject):
         super().__init__(parent)
-        self._period = DEFAULT_BURST_PERIOD_S
+        self.settings = BurstSettings()
 
     @pyqtProperty(float, notify=period_changed)
     def period(self) -> float:
-        return self._period
+        return self.settings.get("burst period")
 
     @period.setter # type: ignore
     def period(self, period: float):
-        if self._period != period:
-            self._period = period
-            self.period_changed.emit(period)
+        previous = self.period
+        try:
+            self.settings.set("burst period", period)
+        except SettingsValueError as error:
+            logging.getLogger(__name__).warning("Ignoring invalid burst period: %s", error)
+            return
+        if previous != self.period:
+            self.period_changed.emit(self.period)
+
+    @pyqtProperty(float, constant=True)
+    def periodMinimum(self):
+        return self.settings.fields["burst period"].minimum
+
+    @pyqtProperty(float, constant=True)
+    def periodMaximum(self):
+        return self.settings.fields["burst period"].maximum
 
     def saveState(self, settings):
-        settings.setValue("burst period", self.period)
+        self.settings.save(settings)
 
     def restoreState(self, settings):
-        burst_period = settings.value("burst period", DEFAULT_BURST_PERIOD_S, type=float)
-        self.period = burst_period
+        previous = self.period
+        self.settings.restore(settings)
+        if previous != self.period:
+            self.period_changed.emit(self.period)

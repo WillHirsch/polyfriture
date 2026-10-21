@@ -17,6 +17,8 @@ Row {
 
     DecimalSpinBox {   
         binding: sineSettingsRoot.settingsViewModel.frequency
+        decimalFrom: sineSettingsRoot.settingsViewModel.frequencyMinimum
+        decimalTo: sineSettingsRoot.settingsViewModel.frequencyMaximum
         onDecimalValueModified: sineSettingsRoot.settingsViewModel.frequency = decimalValue
     }
 }

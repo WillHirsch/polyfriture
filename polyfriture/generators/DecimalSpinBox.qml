@@ -7,8 +7,8 @@ SpinBox {
     property string suffix: " Hz"
     property int decimals: 2
     property real decimalValue: value / decimalFactor
-    property real decimalFrom: 20
-    property real decimalTo: 22000
+    required property real decimalFrom
+    required property real decimalTo
     readonly property real decimalFactor: Math.pow(10, decimals)
 
     signal decimalValueModified()

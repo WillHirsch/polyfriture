@@ -19,6 +19,7 @@
 # along with Friture.  If not, see <http://www.gnu.org/licenses/>.
 
 from inspect import signature
+import logging
 
 from PyQt6.QtQuick import QQuickItem # type: ignore
 from PyQt6.QtQml import QQmlComponent, QQmlContext
@@ -29,12 +30,24 @@ from polyfriture.application import temporary_settings
 from polyfriture.qml_tools import component_raise_if_error, qml_url
 from polyfriture.widgetdict import getWidgetById, widgetIds
 from polyfriture.controlbar_viewmodel import ControlBarViewModel
+from polyfriture.settings_model import IntSetting, SettingsModel, ValueSetting
 
 from typing import Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from polyfriture.analyzer import Friture
     from polyfriture.dockmanager import DockManager
     from PyQt6.QtQml import QQmlEngine
+
+
+def parse_widget_id(value):
+    identifier = IntSetting(widgetIds()[0]).coerce(value)
+    if identifier not in widgetIds():
+        raise ValueError("unknown panel type")
+    return identifier
+
+
+class DockSettings(SettingsModel):
+    fields = {"type": ValueSetting(widgetIds()[0], decode=parse_widget_id)}
 
 
 class Dock(QObject):
@@ -47,6 +60,8 @@ class Dock(QObject):
         widgetId: Optional[int]=None
     ) -> None:
         super().__init__(parent)
+        self.logger = logging.getLogger(__name__)
+        self.settings_model = DockSettings()
 
         self.dockmanager: 'DockManager' = parent.dockmanager
         self.audiobuffer = parent.audiobuffer
@@ -128,13 +143,15 @@ class Dock(QObject):
 
     # slot
     def indexChanged(self, index):
-        if index > len(widgetIds()):
-            index = widgetIds()[0]
+        if not 0 <= index < len(widgetIds()):
+            self.logger.warning("Ignoring invalid panel selection index: %r", index)
+            return
 
         self.widget_select(widgetIds()[index])
 
     # slot
     def widget_select(self, widgetId: int) -> None:
+        widgetId = self.settings_model.set("type", widgetId)
         if self.widgetId == widgetId:
             return
         
@@ -152,9 +169,6 @@ class Dock(QObject):
                 self.audiowidget.cleanup()
             self.audiowidget.deleteLater()
             self.audiowidget = None
-
-        if widgetId not in widgetIds():
-            widgetId = widgetIds()[0]
 
         self.widgetId = widgetId
 
@@ -217,10 +231,13 @@ class Dock(QObject):
 
     # method
     def saveState(self, settings):
-        settings.setValue("type", self.widgetId)
+        self.settings_model.save(settings)
         if self.audiowidget is not None:
             self.audiowidget.saveState(settings)
 
     # method
     def restoreState(self, settings):
+        if settings.contains("type"):
+            self.settings_model.restore(settings)
+            self.widget_select(self.settings_model.get("type"))
         self.audiowidget.restoreState(settings)

@@ -20,6 +20,7 @@
 
 import sys
 import logging
+import re
 
 from PyQt6 import QtCore, QtWidgets
 from PyQt6.QtCore import pyqtSignal  # type: ignore
@@ -27,6 +28,36 @@ from polyfriture.audiobackend import AudioBackend
 from polyfriture.application import APPLICATION_DISPLAY_NAME
 from polyfriture.main_toolbar_view_model import MainToolbarViewModel
 from polyfriture.ui_settings import Ui_Settings_Dialog
+from polyfriture.settings_model import IntSetting, SettingsModel, ValueSetting
+from polyfriture.theme_manager import THEME_LABELS, THEME_SETTING
+
+
+# These IDs are persisted by older settings dialogs as well as this one.
+INPUT_TYPE_IDS = {"Single channel": -2, "Two channels": -3}
+
+
+def _input_type(value):
+    if isinstance(value, str) and re.fullmatch(r"[+-]?\d+", value):
+        value = int(value)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("input type must be an integer")
+    if value == 0:  # Historical default before an input type was saved.
+        return INPUT_TYPE_IDS["Single channel"]
+    if value not in INPUT_TYPE_IDS.values():
+        raise ValueError("unknown input type")
+    return value
+
+
+class GlobalSettings(SettingsModel):
+    """Audio preferences and the settings dialog's theme."""
+
+    fields = {
+        "deviceName": ValueSetting(""),
+        "firstChannel": IntSetting(0, minimum=0),
+        "secondChannel": IntSetting(0, minimum=0),
+        "duoInput": ValueSetting(INPUT_TYPE_IDS["Single channel"], decode=_input_type),
+        "themePreference": THEME_SETTING,
+    }
 
 no_input_device_title = "No audio input device found"
 
@@ -46,24 +77,34 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
         Ui_Settings_Dialog.__init__(self)
 
         self.logger = logging.getLogger(__name__)
+        self.settings_model = GlobalSettings()
 
         self._toolbar_view_model = toolbar_view_model
 
         # Setup the user interface
         self.setupUi(self)
 
+        for button, scheme in (
+                (self.radioButton_themeSystem, QtCore.Qt.ColorScheme.Unknown),
+                (self.radioButton_themeLight, QtCore.Qt.ColorScheme.Light),
+                (self.radioButton_themeDark, QtCore.Qt.ColorScheme.Dark)):
+            self.themeButtonGroup.setId(button, scheme.value)
+            button.setText(THEME_LABELS[scheme])
+        for button, (label, identifier) in zip((self.radioButton_single, self.radioButton_duo),
+                                              INPUT_TYPE_IDS.items()):
+            self.inputTypeButtonGroup.setId(button, identifier)
+            button.setText(label)
+
+        # Theme controls work even when no audio hardware is available.
         self.themeButtonGroup.idToggled.connect(self.theme_preference_toggled)
-        # Set explicit IDs for theme buttons to match ThemeManager enum values
-        # 0 = System (Unknown), 1 = Light, 2 = Dark
-        self.themeButtonGroup.setId(self.radioButton_themeSystem, 0)
-        self.themeButtonGroup.setId(self.radioButton_themeLight, 1)
-        self.themeButtonGroup.setId(self.radioButton_themeDark, 2)
 
         devices = AudioBackend().get_readable_devices_list()
 
         if devices == []:
             # no audio input device
-            if QtWidgets.QApplication.instance().platformName() == "offscreen":
+            application = QtWidgets.QApplication.instance()
+            assert isinstance(application, QtWidgets.QApplication)
+            if application.platformName() == "offscreen":
                 # Headless (e.g. the CI smoke test).
                 # Log and continue with an empty device set instead of exiting,
                 # for validation purposes.
@@ -105,11 +146,14 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
 
     # slot
     def input_device_changed(self, index):
+        if index < 0:
+            return
         self._toolbar_view_model.recording = False
 
         success, index = AudioBackend().select_input_device(index)
 
         self.comboBox_inputDevice.setCurrentIndex(index)
+        self.settings_model.set("deviceName", self.comboBox_inputDevice.currentText())
 
         if not success:
             # Note: the error message is a child of the settings dialog, so that
@@ -137,11 +181,15 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
 
     # slot
     def first_channel_changed(self, index):
+        if index < 0:
+            return
+        self.settings_model.set("firstChannel", index)
         self._toolbar_view_model.recording = False
 
         success, index = AudioBackend().select_first_channel(index)
 
         self.comboBox_firstChannel.setCurrentIndex(index)
+        self.settings_model.set("firstChannel", index)
 
         if not success:
             # Note: the error message is a child of the settings dialog, so that
@@ -154,11 +202,15 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
 
     # slot
     def second_channel_changed(self, index):
+        if index < 0:
+            return
+        self.settings_model.set("secondChannel", index)
         self._toolbar_view_model.recording = False
 
         success, index = AudioBackend().select_second_channel(index)
 
         self.comboBox_secondChannel.setCurrentIndex(index)
+        self.settings_model.set("secondChannel", index)
 
         if not success:
             # Note: the error message is a child of the settings dialog, so that
@@ -172,6 +224,7 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
     # slot
     def single_input_type_selected(self, checked):
         if checked:
+            self.settings_model.set("duoInput", INPUT_TYPE_IDS["Single channel"])
             self.groupBox_second.setEnabled(False)
             AudioBackend().set_single_input()
             self.logger.info("Switching to single input")
@@ -179,6 +232,7 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
     # slot
     def duo_input_type_selected(self, checked):
         if checked:
+            self.settings_model.set("duoInput", INPUT_TYPE_IDS["Two channels"])
             self.groupBox_second.setEnabled(True)
             AudioBackend().set_duo_input()
             self.logger.info("Switching to difference between two inputs")
@@ -186,6 +240,7 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
     # slot
     def theme_preference_toggled(self, button_id: int, checked: bool) -> None:
         if checked:
+            button_id = self.settings_model.set("themePreference", button_id)
             self.theme_preference_changed.emit(button_id)
             self.logger.info("Theme preference changed to: %d", button_id)
 
@@ -193,24 +248,29 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
     def saveState(self, settings):
         # for the input device, we search by name instead of index, since
         # we do not know if the device order stays the same between sessions
-        settings.setValue("deviceName", self.comboBox_inputDevice.currentText())
-        settings.setValue("firstChannel", self.comboBox_firstChannel.currentIndex())
-        settings.setValue("secondChannel", self.comboBox_secondChannel.currentIndex())
-        settings.setValue("duoInput", self.inputTypeButtonGroup.checkedId())
-        settings.setValue("themePreference", self.themeButtonGroup.checkedId())
+        values = {
+            "duoInput": self.inputTypeButtonGroup.checkedId(),
+            "themePreference": self.themeButtonGroup.checkedId(),
+        }
+        if self.comboBox_inputDevice.currentIndex() >= 0:
+            values.update(deviceName=self.comboBox_inputDevice.currentText(),
+                          firstChannel=self.comboBox_firstChannel.currentIndex(),
+                          secondChannel=self.comboBox_secondChannel.currentIndex())
+        self.settings_model.update(values)
+        self.settings_model.save(settings)
 
     # method
     def restoreState(self, settings):
-        device_name = settings.value("deviceName", "")
+        self.settings_model.restore(settings)
+        device_name = self.settings_model.get("deviceName")
         device_index = self.comboBox_inputDevice.findText(device_name)
         # change the device only if it exists in the device list
         if device_index >= 0:
             self.comboBox_inputDevice.setCurrentIndex(device_index)
-            channel = settings.value("firstChannel", 0, type=int)
-            self.comboBox_firstChannel.setCurrentIndex(channel)
-            channel = settings.value("secondChannel", 0, type=int)
-            self.comboBox_secondChannel.setCurrentIndex(channel)
-            duo_input_id = settings.value("duoInput", 0, type=int)
-            self.inputTypeButtonGroup.button(duo_input_id).setChecked(True)
-        theme_preference_id = settings.value("themePreference", 0, type=int)
+            # The backend decides whether a valid channel/device is available.
+            self.first_channel_changed(self.settings_model.get("firstChannel"))
+            self.second_channel_changed(self.settings_model.get("secondChannel"))
+        duo_input_id = self.settings_model.get("duoInput")
+        self.inputTypeButtonGroup.button(duo_input_id).setChecked(True)
+        theme_preference_id = self.settings_model.get("themePreference")
         self.themeButtonGroup.button(theme_preference_id).setChecked(True)

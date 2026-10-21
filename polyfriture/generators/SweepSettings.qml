@@ -21,6 +21,8 @@ Column {
 
         DecimalSpinBox {   
             binding: root.settingsViewModel.start_frequency
+            decimalFrom: root.settingsViewModel.startFrequencyMinimum
+            decimalTo: root.settingsViewModel.startFrequencyMaximum
             onDecimalValueModified: root.settingsViewModel.start_frequency = decimalValue
         }
     }
@@ -36,6 +38,8 @@ Column {
 
         DecimalSpinBox {   
             binding: root.settingsViewModel.stop_frequency
+            decimalFrom: root.settingsViewModel.stopFrequencyMinimum
+            decimalTo: root.settingsViewModel.stopFrequencyMaximum
             onDecimalValueModified: root.settingsViewModel.stop_frequency = decimalValue
         }
     }
@@ -52,8 +56,8 @@ Column {
             binding: root.settingsViewModel.period
             onDecimalValueModified: root.settingsViewModel.period = decimalValue
             suffix: " s"
-            decimalFrom: 0.01
-            decimalTo: 60
+            decimalFrom: root.settingsViewModel.periodMinimum
+            decimalTo: root.settingsViewModel.periodMaximum
         }
     }
 }

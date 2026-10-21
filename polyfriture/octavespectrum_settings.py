@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # Copyright (C) 2009 Timoth?Lecomte
+# Copyright (C) 2026 Will Hirsch
 
 # This file is part of Friture.
 #
@@ -20,6 +21,8 @@
 import logging
 
 from PyQt6 import QtWidgets
+from polyfriture.settings_model import ChoiceSetting, IntSetting, SettingsModel
+from polyfriture.settings_binding import bind_combobox, bind_spinbox
 
 # shared with octavespectrum.py
 DEFAULT_SPEC_MIN = -80
@@ -31,10 +34,21 @@ DEFAULT_RESPONSE_TIME = 1.
 DEFAULT_RESPONSE_TIME_INDEX = 3
 
 
+class OctaveSpectrumSettings(SettingsModel):
+    fields = {
+        "bandsPerOctave": ChoiceSetting(DEFAULT_BANDSPEROCTAVE_INDEX, labels=("1", "3", "6", "12", "24")),
+        "Min": IntSetting(DEFAULT_SPEC_MIN, minimum=-200, maximum=200),
+        "Max": IntSetting(DEFAULT_SPEC_MAX, minimum=-200, maximum=200),
+        "weighting": ChoiceSetting(DEFAULT_WEIGHTING, labels=("None", "A", "B", "C")),
+        "response_time": ChoiceSetting(DEFAULT_RESPONSE_TIME_INDEX, labels=("25 ms (Impulse)", "125 ms (Fast)", "300 ms", "1s (Slow)", "5s (Very Slow)")),
+    }
+
+
 class OctaveSpectrum_Settings_Dialog(QtWidgets.QDialog):
 
     def __init__(self, parent, view_model):
         super().__init__(parent)
+        self.model = OctaveSpectrumSettings()
 
         self.view_model = view_model
 
@@ -46,45 +60,22 @@ class OctaveSpectrum_Settings_Dialog(QtWidgets.QDialog):
 
         self.comboBox_bandsperoctave = QtWidgets.QComboBox(self)
         self.comboBox_bandsperoctave.setObjectName("comboBox_bandsperoctave")
-        self.comboBox_bandsperoctave.addItem("1")
-        self.comboBox_bandsperoctave.addItem("3")
-        self.comboBox_bandsperoctave.addItem("6")
-        self.comboBox_bandsperoctave.addItem("12")
-        self.comboBox_bandsperoctave.addItem("24")
-        self.comboBox_bandsperoctave.setCurrentIndex(DEFAULT_BANDSPEROCTAVE_INDEX)
 
         self.spinBox_specmin = QtWidgets.QSpinBox(self)
         self.spinBox_specmin.setKeyboardTracking(False)
-        self.spinBox_specmin.setMinimum(-200)
-        self.spinBox_specmin.setMaximum(200)
-        self.spinBox_specmin.setProperty("value", DEFAULT_SPEC_MIN)
         self.spinBox_specmin.setObjectName("spinBox_specmin")
         self.spinBox_specmin.setSuffix(" dB")
 
         self.spinBox_specmax = QtWidgets.QSpinBox(self)
         self.spinBox_specmax.setKeyboardTracking(False)
-        self.spinBox_specmax.setMinimum(-200)
-        self.spinBox_specmax.setMaximum(200)
-        self.spinBox_specmax.setProperty("value", DEFAULT_SPEC_MAX)
         self.spinBox_specmax.setObjectName("spinBox_specmax")
         self.spinBox_specmax.setSuffix(" dB")
 
         self.comboBox_weighting = QtWidgets.QComboBox(self)
         self.comboBox_weighting.setObjectName("weighting")
-        self.comboBox_weighting.addItem("None")
-        self.comboBox_weighting.addItem("A")
-        self.comboBox_weighting.addItem("B")
-        self.comboBox_weighting.addItem("C")
-        self.comboBox_weighting.setCurrentIndex(DEFAULT_WEIGHTING)
 
         self.comboBox_response_time = QtWidgets.QComboBox(self)
         self.comboBox_response_time.setObjectName("response_time")
-        self.comboBox_response_time.addItem("25 ms (Impulse)")
-        self.comboBox_response_time.addItem("125 ms (Fast)")
-        self.comboBox_response_time.addItem("300 ms")
-        self.comboBox_response_time.addItem("1s (Slow)")
-        self.comboBox_response_time.addItem("5s (Very Slow)")
-        self.comboBox_response_time.setCurrentIndex(DEFAULT_RESPONSE_TIME_INDEX)
 
         self.formLayout.addRow("Bands per octave:", self.comboBox_bandsperoctave)
         self.formLayout.addRow("Min:", self.spinBox_specmin)
@@ -94,11 +85,11 @@ class OctaveSpectrum_Settings_Dialog(QtWidgets.QDialog):
 
         self.setLayout(self.formLayout)
 
-        self.comboBox_bandsperoctave.currentIndexChanged.connect(self.bandsperoctavechanged)
-        self.spinBox_specmin.valueChanged.connect(view_model.setmin)
-        self.spinBox_specmax.valueChanged.connect(view_model.setmax)
-        self.comboBox_weighting.currentIndexChanged.connect(view_model.setweighting)
-        self.comboBox_response_time.currentIndexChanged.connect(self.responsetimechanged)
+        bind_combobox(self.comboBox_bandsperoctave, self.model, "bandsPerOctave", self.bandsperoctavechanged)
+        bind_spinbox(self.spinBox_specmin, self.model, "Min", view_model.setmin)
+        bind_spinbox(self.spinBox_specmax, self.model, "Max", view_model.setmax)
+        bind_combobox(self.comboBox_weighting, self.model, "weighting", view_model.setweighting)
+        bind_combobox(self.comboBox_response_time, self.model, "response_time", self.responsetimechanged)
 
     # slot
     def bandsperoctavechanged(self, index):
@@ -117,27 +108,18 @@ class OctaveSpectrum_Settings_Dialog(QtWidgets.QDialog):
         elif index == 3:
             response_time = 1.
         elif index == 4:
-            response_time = 5.           
+            response_time = 5.
         self.logger.info("responsetimechanged slot %d %d", index, response_time)
         self.view_model.setresponsetime(response_time)
 
     # method
     def saveState(self, settings):
-        settings.setValue("bandsPerOctave", self.comboBox_bandsperoctave.currentIndex())
-        settings.setValue("Min", self.spinBox_specmin.value())
-        settings.setValue("Max", self.spinBox_specmax.value())
-        settings.setValue("weighting", self.comboBox_weighting.currentIndex())
-        settings.setValue("response_time", self.comboBox_response_time.currentIndex())
+        self.model.save(settings)
 
-    # method
     def restoreState(self, settings):
-        bandsPerOctave = settings.value("bandsPerOctave", DEFAULT_BANDSPEROCTAVE_INDEX, type=int)
-        self.comboBox_bandsperoctave.setCurrentIndex(bandsPerOctave)
-        colorMin = settings.value("Min", DEFAULT_SPEC_MIN, type=int)
-        self.spinBox_specmin.setValue(colorMin)
-        colorMax = settings.value("Max", DEFAULT_SPEC_MAX, type=int)
-        self.spinBox_specmax.setValue(colorMax)
-        weighting = settings.value("weighting", DEFAULT_WEIGHTING, type=int)
-        self.comboBox_weighting.setCurrentIndex(weighting)
-        response_time_index = settings.value("response_time", DEFAULT_RESPONSE_TIME_INDEX, type=int)
-        self.comboBox_response_time.setCurrentIndex(response_time_index)
+        self.model.restore(settings)
+        self.comboBox_bandsperoctave.setCurrentIndex(self.model.get("bandsPerOctave"))
+        self.spinBox_specmin.setValue(self.model.get("Min"))
+        self.spinBox_specmax.setValue(self.model.get("Max"))
+        self.comboBox_weighting.setCurrentIndex(self.model.get("weighting"))
+        self.comboBox_response_time.setCurrentIndex(self.model.get("response_time"))
