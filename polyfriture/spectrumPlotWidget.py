@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from enum import Enum
 import logging
 
 from PyQt6.QtCore import QObject
@@ -22,11 +21,6 @@ PEAK_DECAY_RATE = 1.0 - 3e-6
 PEAK_FALLOFF_COUNT = 32  # default : 16
 
 
-class Baseline(Enum):
-    PLOT_BOTTOM = (1,)
-    DATA_ZERO = 2
-
-
 class SpectrumPlotWidget(QObject):
 
     def __init__(self, parent):
@@ -40,6 +34,7 @@ class SpectrumPlotWidget(QObject):
         self._spectrum_data.add_plot_item(self._curve_signal)
 
         self._curve_peak = FilledCurve(CurveType.PEEK)
+        self._spectrum_data.insert_plot_item(0, self._curve_peak)
 
         self._spectrum_data.show_legend = False
         self._spectrum_data.vertical_axis.name = "PSD (dB)"
@@ -51,11 +46,8 @@ class SpectrumPlotWidget(QObject):
         self._spectrum_data.vertical_axis.setRange(0, 1)
         self._spectrum_data.horizontal_axis.setRange(0, 22000)
 
-        self._baseline = Baseline.PLOT_BOTTOM
-
         self.paused = False
 
-        self.peaks_enabled = True
         self.peak = zeros((3,))
         self.peak_int = zeros((3,))
         self.peak_decay = ones((3,)) * PEAK_DECAY_RATE
@@ -105,20 +97,6 @@ class SpectrumPlotWidget(QObject):
     def setShowPitchLabel(self, showPitchLabel):
         self._spectrum_data.showPitchTracker = showPitchLabel
 
-    def set_peaks_enabled(self, enabled):
-        self.peaks_enabled = enabled
-
-        if enabled:
-            self._spectrum_data.insert_plot_item(0, self._curve_peak)
-        else:
-            self._spectrum_data.remove_plot_item(self._curve_peak)
-
-    def set_baseline_displayUnits(self, baseline):
-        self._baseline = Baseline.PLOT_BOTTOM
-
-    def set_baseline_dataUnits(self, baseline):
-        self._baseline = Baseline.DATA_ZERO
-
     def setdata(self, x, y, fmax, fpitch):
         if not self.paused:
             if fmax < 2e2:
@@ -146,25 +124,18 @@ class SpectrumPlotWidget(QObject):
             scaled_x_left = self.normHorizontalScaleTransform.toScreen(x_left)
             scaled_x_right = self.normHorizontalScaleTransform.toScreen(x_right)
 
-            baseline = (
-                1.0
-                if self._baseline == Baseline.PLOT_BOTTOM
-                else (1.0 - self.normVerticalScaleTransform.toScreen(0.0))
-            )
-
             scaled_y = 1.0 - self.normVerticalScaleTransform.toScreen(y)
             z = y_int
             self._curve_signal.setData(
-                scaled_x_left, scaled_x_right, scaled_y, z, baseline
+                scaled_x_left, scaled_x_right, scaled_y, z, 1.0
             )
 
-            if self.peaks_enabled:
-                self.compute_peaks(y)
-                scaled_peak = 1.0 - self.normVerticalScaleTransform.toScreen(self.peak)
-                z_peak = self.peak_int
-                self._curve_peak.setData(
-                    scaled_x_left, scaled_x_right, scaled_peak, z_peak, baseline
-                )
+            self.compute_peaks(y)
+            scaled_peak = 1.0 - self.normVerticalScaleTransform.toScreen(self.peak)
+            z_peak = self.peak_int
+            self._curve_peak.setData(
+                scaled_x_left, scaled_x_right, scaled_peak, z_peak, 1.0
+            )
 
     def draw(self):
         return

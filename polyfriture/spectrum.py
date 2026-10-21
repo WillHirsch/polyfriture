@@ -57,7 +57,6 @@ class Spectrum_Widget(QObject):
         self.spec_min = DEFAULT_SPEC_MIN
         self.spec_max = DEFAULT_SPEC_MAX
         self.weighting = DEFAULT_WEIGHTING
-        self.dual_channels = False
         self.response_time = DEFAULT_RESPONSE_TIME
 
         self.update_weighting()
@@ -75,8 +74,6 @@ class Spectrum_Widget(QObject):
         self.PlotZoneSpect.setfreqrange(self.minfreq, self.maxfreq)
         self.PlotZoneSpect.setspecrange(self.spec_min, self.spec_max)
         self.PlotZoneSpect.setweighting(self.weighting)
-        self.PlotZoneSpect.set_peaks_enabled(True)
-        self.PlotZoneSpect.set_baseline_displayUnits(0.)
         self.PlotZoneSpect.setShowFreqLabel(DEFAULT_SHOW_FREQ_LABELS)
 
         # initialize the settings dialog
@@ -139,37 +136,26 @@ class Spectrum_Widget(QObject):
         realizable = int(floor(available / needed))
 
         if realizable > 0:
-            sp1n = zeros((len(self.freq), realizable), dtype=float64)
-            sp2n = zeros((len(self.freq), realizable), dtype=float64)
+            spectra = zeros((len(self.freq), realizable), dtype=float64)
 
             for i in range(realizable):
                 floatdata = self.audiobuffer.data_indexed(self.old_index, self.fft_size)
 
                 # first channel
                 # FFT transform
-                sp1n[:, i] = self.proc.analyzelive(floatdata[0, :])
-
-                if self.dual_channels and floatdata.shape[0] > 1:
-                    # second channel for comparison
-                    sp2n[:, i] = self.proc.analyzelive(floatdata[1, :])
+                spectra[:, i] = self.proc.analyzelive(floatdata[0, :])
 
                 self.old_index += int(needed)
 
             # compute the widget data
-            sp1 = exp_smoothed_value_2d(self.kernel, self.alpha, sp1n, self.dispbuffers1)
-            sp2 = exp_smoothed_value_2d(self.kernel, self.alpha, sp2n, self.dispbuffers2)
+            spectrum = exp_smoothed_value_2d(self.kernel, self.alpha, spectra, self.dispbuffer)
             # store result for next computation
-            self.dispbuffers1 = sp1
-            self.dispbuffers2 = sp2
+            self.dispbuffer = spectrum
 
-            sp1.shape = self.freq.shape
-            sp2.shape = self.freq.shape
+            spectrum.shape = self.freq.shape
             self.w.shape = self.freq.shape
 
-            if self.dual_channels and floatdata.shape[0] > 1:
-                dB_spectrogram = self.log_spectrogram(sp2) - self.log_spectrogram(sp1)
-            else:
-                dB_spectrogram = self.log_spectrogram(sp1) + self.w
+            dB_spectrogram = self.log_spectrogram(spectrum) + self.w
 
             # the log operation and the weighting could be deffered
             # to the post-weedening !
@@ -178,7 +164,7 @@ class Spectrum_Widget(QObject):
 
             # The maximum value in the harmonic product spectrum is quite
             # likely to correspond to a fundamental frequency.
-            harmonic_products = self.harmonic_product_spectrum(sp1)
+            harmonic_products = self.harmonic_product_spectrum(spectrum)
             pitch_idx = argmax(harmonic_products)
             fpitch = max(self.freq[pitch_idx], 1e-20)
 
@@ -223,8 +209,7 @@ class Spectrum_Widget(QObject):
         return kernel
 
     def update_display_buffers(self):
-        self.dispbuffers1 = zeros(len(self.freq))
-        self.dispbuffers2 = zeros(len(self.freq))
+        self.dispbuffer = zeros(len(self.freq))
 
     def setminfreq(self, minfreq):
         self.setMinMaxFreq(minfreq, self.maxfreq)
@@ -283,15 +268,6 @@ class Spectrum_Widget(QObject):
             self.w = C
 
         self.w.shape = (1, self.w.size)
-
-    def setdualchannels(self, dual_enabled):
-        self.dual_channels = dual_enabled
-        if dual_enabled:
-            self.PlotZoneSpect.set_peaks_enabled(False)
-            self.PlotZoneSpect.set_baseline_dataUnits(0.)
-        else:
-            self.PlotZoneSpect.set_peaks_enabled(True)
-            self.PlotZoneSpect.set_baseline_displayUnits(0.)
 
     def setShowFreqLabel(self, showFreqLabel):
         self.PlotZoneSpect.setShowFreqLabel(showFreqLabel)

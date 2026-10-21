@@ -17,7 +17,6 @@ RowLayout {
             "2D Spectrogram",
             "Octave Spectrum",
             "Generator",
-            "Delay Estimator",
             "Long-time levels",
             "Pitch Tracker"
         ]

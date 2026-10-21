@@ -17,7 +17,7 @@
 | `polyfriture/audioproc.py`  | `audioproc` — FFT analysis for the spectrum widget         |
 | `polyfriture/dockmanager.py`| `DockManager` — manages dock creation/closure/ordering     |
 | `polyfriture/dock.py`       | `Dock` — QML dock container hosting an audio widget         |
-| `polyfriture/widgetdict.py` | Registry of available visualization widgets (8 types)      |
+| `polyfriture/widgetdict.py` | Registry of available visualization widgets (7 types)      |
 | `polyfriture/store.py`      | `Store` singleton exposed to QML for dock state              |
 | `polyfriture/plotting/`     | Plotting infrastructure (CoordinateTransform, ScaleDivision, frequency scales, color maps) |
 | `polyfriture/signal/`       | Signal processing modules (IIR/FIR filters, resampling, transforms) |
@@ -64,7 +64,6 @@ Available widgets (see `widgetdict.py`):
 | 3         | `Spectrogram_Widget` | `Spectrogram.qml` | 2D rolling spectrogram |
 | 4         | `OctaveSpectrum_Widget` | `OctaveSpectrum.qml` | Octave-band spectrum |
 | 5         | `Generator_Widget` | `Generator.qml` | Signal generator        |
-| 6         | `Delay_Estimator_Widget` | `DelayEstimator.qml` | Delay estimation |
 | 7         | `LongLevelWidget`  | —               | Long-time level meters  |
 | 8         | `PitchTrackerWidget` | `PitchView.qml` | Pitch tracking         |
 
@@ -79,7 +78,6 @@ Available widgets (see `widgetdict.py`):
 - `transform_pipeline.py` — generic pipeline of processing blocks
 - `lookup_table.py` — fast lookup tables
 - `linear_interp.py` — linear interpolation
-- `correlation.py` — cross-correlation (used by delay estimator)
 - `color_tranform.py` — color transformations
 
 ## Development Setup
