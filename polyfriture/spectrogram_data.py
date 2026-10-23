@@ -19,8 +19,21 @@
 # along with Friture.  If not, see <http://www.gnu.org/licenses/>.
 
 from polyfriture.scope_data import Scope_Data
+from PyQt6.QtCore import pyqtProperty, pyqtSignal
 
 class Spectrogram_Data(Scope_Data):
+    rotated_changed = pyqtSignal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._rotated = False
+
+    @pyqtProperty(bool, notify=rotated_changed)
+    def rotated(self):
+        return self._rotated
+
+    @rotated.setter
+    def rotated(self, rotated):
+        if self._rotated != rotated:
+            self._rotated = rotated
+            self.rotated_changed.emit(rotated)

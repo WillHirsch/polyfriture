@@ -62,6 +62,7 @@ import "{package_url}"
 Item {{
     id: fixture
     property alias gridColumns: grid.configuredColumns
+    property alias transposed: grid.transposed
     property alias channels: grid.channels
     property string readout: "0 dB"
     property real preferredHeaderHeight: 24
@@ -101,11 +102,12 @@ Item {{
     )
     roots = []
 
-    def create(count, columns=None, width=960, height=640, colorbar=False):
+    def create(count, columns=None, width=960, height=640, colorbar=False, transposed=False):
         axes.show_color_axis = colorbar
         properties = {
             "width": width,
             "height": height,
+            "transposed": transposed,
             "channels": [
                 {"label": f"Channel {index + 1}", "value": 100 + index}
                 for index in range(count)
@@ -188,6 +190,22 @@ def test_incomplete_grid_fills_bottom_to_top_then_left_to_right(grid_factory):
     assert_equal_data_geometry(grid, 5)
 
 
+def test_transposed_incomplete_grid_starts_at_bottom_left_with_populated_boundaries(grid_factory):
+    _, grid, _ = grid_factory(5, 3, transposed=True)
+    assert grid.property("rowCount") == 3
+    assert grid.property("columnCount") == 2
+    cells = [named_item(grid, f"channel-grid-cell-{index}") for index in range(5)]
+    assert [(cell.property("column"), cell.property("rowFromBottom")) for cell in cells] == [
+        (0, 0), (1, 0), (0, 1), (1, 1), (0, 2),
+    ]
+    # Top: [5, empty], middle: [3, 4], bottom: [1, 2].
+    points = [position(cell, grid) for cell in cells]
+    assert points[0].x() == points[2].x() == points[4].x() < points[1].x() == points[3].x()
+    assert points[4].y() < points[2].y() == points[3].y() < points[0].y() == points[1].y()
+    assert_equal_data_geometry(grid, 5)
+
+
+@pytest.mark.parametrize("transposed", [False, True])
 @pytest.mark.parametrize("count,columns,rows,occupied_columns", [
     (0, 3, 0, 0),
     (1, 8, 1, 1),
@@ -196,17 +214,26 @@ def test_incomplete_grid_fills_bottom_to_top_then_left_to_right(grid_factory):
     (6, 3, 2, 3),
     (7, 3, 3, 3),
 ])
-def test_only_occupied_boundaries_have_axes(grid_factory, count, columns, rows, occupied_columns):
-    _, grid, axes = grid_factory(count, columns, colorbar=True)
+def test_only_occupied_boundaries_have_axes(grid_factory, count, columns, rows, occupied_columns, transposed):
+    _, grid, axes = grid_factory(count, columns, colorbar=True, transposed=transposed)
+    if transposed:
+        rows, occupied_columns = occupied_columns, rows
     data_items = assert_equal_data_geometry(grid, count)
     y_scales = named_items(grid, "channel-grid-y-scale-")
     x_scales = named_items(grid, "channel-grid-x-scale-")
     assert len(y_scales) == rows
     assert len(x_scales) == occupied_columns
-    for scale in y_scales:
+    for row in range(rows):
+        scale = named_item(grid, f"channel-grid-y-scale-{row}")
         assert_qml_identity(scale, "scale_division === testAxes.vertical_axis.scale_division")
         assert scale.height() == pytest.approx(grid.property("dataHeight"))
         assert position(scale, grid).x() <= min(position(item, grid).x() for item in data_items)
+        left_cell = next(
+            cell for cell in named_items(grid, "channel-grid-cell-")
+            if cell.property("column") == 0 and cell.property("rowFromBottom") == rows - 1 - row
+        )
+        data = named_item(grid, f"channel-grid-data-{left_cell.property('channelIndex')}")
+        assert position(scale, grid).y() == pytest.approx(position(data, grid).y())
     for column in range(occupied_columns):
         scale = named_item(grid, f"channel-grid-x-scale-{column}")
         assert_qml_identity(scale, "scale_division === testAxes.horizontal_axis.scale_division")
@@ -224,21 +251,25 @@ def test_only_occupied_boundaries_have_axes(grid_factory, count, columns, rows, 
         assert_qml_identity(color_scales[0], "scale_division === testAxes.color_axis.scale_division")
 
 
-def test_plot_payload_and_all_axes_are_shared_without_per_channel_parameters(grid_factory):
-    _, grid, axes = grid_factory(5, 3)
+@pytest.mark.parametrize("transposed", [False, True])
+def test_plot_payload_and_all_axes_are_shared_without_per_channel_parameters(grid_factory, transposed):
+    _, grid, axes = grid_factory(5, 3, transposed=transposed)
     assert named_items(grid, "channel-grid-color-scale") == []
     for index in range(5):
         content = named_item(grid, f"test-channel-content-{index}")
         assert content.property("presentedIndex") == index
         assert content.property("presentedLabel") == f"Channel {index + 1}"
         assert content.property("presentedPayload") == 100 + index
+        assert content.rotation() == 0
+        assert named_item(grid, f"test-channel-header-{index}").rotation() == 0
         data = named_item(grid, f"channel-grid-data-{index}")
         assert_qml_identity(data, "horizontal_axis === testAxes.horizontal_axis")
         assert_qml_identity(data, "vertical_axis === testAxes.vertical_axis")
 
 
-def test_long_labels_and_live_readouts_preserve_equal_plot_geometry(grid_factory, qt_application):
-    root, grid, axes = grid_factory(5, 3, colorbar=True)
+@pytest.mark.parametrize("transposed", [False, True])
+def test_long_labels_and_live_readouts_preserve_equal_plot_geometry(grid_factory, qt_application, transposed):
+    root, grid, axes = grid_factory(5, 3, colorbar=True, transposed=transposed)
     before = [(item.width(), item.height()) for item in assert_equal_data_geometry(grid, 5)]
     root.setProperty("channels", [
         {"label": "Very long physical channel label " * (index + 1), "value": 100 + index}
@@ -261,8 +292,9 @@ def test_long_labels_and_live_readouts_preserve_equal_plot_geometry(grid_factory
 
 @pytest.mark.parametrize("size", [(1, 1), (0, 0), (25, 10)])
 @pytest.mark.parametrize("count,columns", [(0, 4), (1, 4), (5, 3)])
-def test_tiny_panels_keep_plot_and_axis_geometry_nonnegative(grid_factory, size, count, columns):
-    _, grid, _ = grid_factory(count, columns, width=size[0], height=size[1], colorbar=True)
+@pytest.mark.parametrize("transposed", [False, True])
+def test_tiny_panels_keep_plot_and_axis_geometry_nonnegative(grid_factory, size, count, columns, transposed):
+    _, grid, _ = grid_factory(count, columns, width=size[0], height=size[1], colorbar=True, transposed=transposed)
     assert grid.property("dataWidth") >= 0
     assert grid.property("dataHeight") >= 0
     assert_equal_data_geometry(grid, count)
@@ -285,12 +317,48 @@ def test_global_column_changes_reflow_an_existing_grid(grid_factory, qt_applicat
         assert_equal_data_geometry(grid, 5)
         last = named_item(grid, "channel-grid-cell-4")
         assert (last.property("column"), last.property("rowFromBottom")) == (2, 0)
+        grid.setProperty("transposed", True)
+        settle(qt_application)
+        assert (grid.property("columnCount"), grid.property("rowCount")) == (2, 3)
+        store.channel_grid_columns = 2
+        settle(qt_application)
+        assert (grid.property("columnCount"), grid.property("rowCount")) == (3, 2)
+        assert (last.property("column"), last.property("rowFromBottom")) == (1, 1)
+        assert_equal_data_geometry(grid, 5)
     finally:
         store.channel_grid_columns = previous
 
 
-def test_live_channel_replacement_addition_removal_and_empty_grid(grid_factory, qt_application):
+def test_live_transpose_reflows_existing_cells_without_rotating_content(grid_factory, qt_application):
     root, grid, _ = grid_factory(5, 3, colorbar=True)
+    data_items = assert_equal_data_geometry(grid, 5)
+    for transposed, columns, rows in ((True, 2, 3), (False, 3, 2), (True, 2, 3)):
+        root.setProperty("transposed", transposed)
+        root.setProperty("width", 781)
+        root.setProperty("height", 513)
+        settle(qt_application)
+        assert grid.rotation() == 0
+        assert (grid.property("columnCount"), grid.property("rowCount")) == (columns, rows)
+        assert assert_equal_data_geometry(grid, 5) == data_items
+        assert len(named_items(grid, "channel-grid-x-scale-")) == columns
+        assert len(named_items(grid, "channel-grid-y-scale-")) == rows
+        assert len(named_items(grid, "channel-grid-color-scale")) == 1
+        for index, data in enumerate(data_items):
+            assert data.rotation() == 0
+            assert_qml_identity(data, "horizontal_axis === testAxes.horizontal_axis")
+            assert_qml_identity(data, "vertical_axis === testAxes.vertical_axis")
+            assert named_item(grid, f"test-channel-header-{index}").rotation() == 0
+            content = named_item(grid, f"test-channel-content-{index}")
+            assert content.rotation() == 0
+            assert content.property("presentedPayload") == 100 + index
+    assert not grid_factory.qml_warnings, "\n".join(
+        warning.toString() for warning in grid_factory.qml_warnings
+    )
+
+
+@pytest.mark.parametrize("transposed", [False, True])
+def test_live_channel_replacement_addition_removal_and_empty_grid(grid_factory, qt_application, transposed):
+    root, grid, _ = grid_factory(5, 3, colorbar=True, transposed=transposed)
     for count in (2, 7, 0, 3):
         labels = [f"Replacement channel {index + 1}" for index in range(count)]
         root.setProperty("channels", [
@@ -300,7 +368,9 @@ def test_live_channel_replacement_addition_removal_and_empty_grid(grid_factory, 
         settle(qt_application)
         assert len(named_items(grid, "channel-grid-cell-")) == count
         assert_equal_data_geometry(grid, count)
-        assert len(named_items(grid, "channel-grid-x-scale-")) == min(count, 3)
+        columns = min(count, 3)
+        rows = (count + columns - 1) // columns if columns else 0
+        assert len(named_items(grid, "channel-grid-x-scale-")) == (rows if transposed else columns)
         assert len(named_items(grid, "channel-grid-color-scale")) == (1 if count else 0)
         for index, label in enumerate(labels):
             content = named_item(grid, f"test-channel-content-{index}")

@@ -21,8 +21,8 @@
 import logging
 
 from PyQt6 import QtWidgets
-from polyfriture.settings_model import ChoiceSetting, FloatSetting, IntSetting, SettingsModel
-from polyfriture.settings_binding import bind_combobox, bind_spinbox
+from polyfriture.settings_model import BoolSetting, ChoiceSetting, FloatSetting, IntSetting, SettingsModel
+from polyfriture.settings_binding import bind_checkbox, bind_combobox, bind_spinbox
 from polyfriture.audiobackend import SAMPLING_RATE
 import polyfriture.plotting.frequency_scales as fscales
 
@@ -47,6 +47,7 @@ class SpectrogramSettings(SettingsModel):
         "colorMin": IntSetting(DEFAULT_SPEC_MIN, minimum=-200, maximum=200),
         "colorMax": IntSetting(DEFAULT_SPEC_MAX, minimum=-200, maximum=200),
         "weighting": ChoiceSetting(DEFAULT_WEIGHTING, labels=("None", "A", "B", "C")),
+        "rotated": BoolSetting(False),
     }
 
 
@@ -98,6 +99,12 @@ class Spectrogram_Settings_Dialog(QtWidgets.QDialog):
         self.comboBox_weighting = QtWidgets.QComboBox(self)
         self.comboBox_weighting.setObjectName("weighting")
 
+        self.checkBox_rotated = QtWidgets.QCheckBox("Rotate 90\N{DEGREE SIGN} clockwise", self)
+        self.checkBox_rotated.setObjectName("checkBox_rotated")
+        self.checkBox_rotated.setToolTip(
+            "Frequency increases rightward; newest audio appears at the bottom. "
+            "The grid is transposed, so the global column count becomes the row count.")
+
         self.formLayout.addRow("Time range:", self.doubleSpinBox_timerange)
         self.formLayout.addRow("FFT Size:", self.comboBox_fftsize)
         self.formLayout.addRow("Frequency scale:", self.comboBox_freqscale)
@@ -106,6 +113,7 @@ class Spectrogram_Settings_Dialog(QtWidgets.QDialog):
         self.formLayout.addRow("Min color:", self.spinBox_specmin)
         self.formLayout.addRow("Max color:", self.spinBox_specmax)
         self.formLayout.addRow("Middle-ear weighting:", self.comboBox_weighting)
+        self.formLayout.addRow("Orientation:", self.checkBox_rotated)
 
         self.setLayout(self.formLayout)
 
@@ -117,6 +125,7 @@ class Spectrogram_Settings_Dialog(QtWidgets.QDialog):
         bind_spinbox(self.spinBox_specmax, self.model, "colorMax", view_model.setmax)
         bind_spinbox(self.doubleSpinBox_timerange, self.model, "timeRange", view_model.timerangechanged)
         bind_combobox(self.comboBox_weighting, self.model, "weighting", view_model.setweighting)
+        bind_checkbox(self.checkBox_rotated, self.model, "rotated", view_model.setrotated)
 
     # slot
     def fftsizechanged(self, index):
@@ -143,3 +152,4 @@ class Spectrogram_Settings_Dialog(QtWidgets.QDialog):
         self.spinBox_specmin.setValue(self.model.get("colorMin"))
         self.spinBox_specmax.setValue(self.model.get("colorMax"))
         self.comboBox_weighting.setCurrentIndex(self.model.get("weighting"))
+        self.checkBox_rotated.setChecked(self.model.get("rotated"))

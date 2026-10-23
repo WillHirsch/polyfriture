@@ -6,6 +6,7 @@ from polyfriture.plotting.scaleDivision import ScaleDivision
 
 class Axis(QtCore.QObject):
     name_changed = QtCore.pyqtSignal(str)
+    coordinate_transform_changed = QtCore.pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -37,10 +38,12 @@ class Axis(QtCore.QObject):
     def setRange(self, scale_min, scale_max):
         self._scale_division.setRange(scale_min, scale_max)
         self._coordinate_transform.setRange(scale_min, scale_max)
+        self.coordinate_transform_changed.emit()
 
     def setScale(self, scale):
         self._scale_division.setScale(scale)
         self._coordinate_transform.setScale(scale)
+        self.coordinate_transform_changed.emit()
 
     @pyqtProperty(QObject, constant=True) # type: ignore
     def scale_division(self):
@@ -54,6 +57,6 @@ class Axis(QtCore.QObject):
     def show_minor_grid_lines(self, show: bool):
         self._show_minor_grid_lines = show
 
-    @pyqtProperty(CoordinateTransform, constant=True) # type: ignore
+    @pyqtProperty(CoordinateTransform, notify=coordinate_transform_changed) # type: ignore
     def coordinate_transform(self):
         return self._coordinate_transform

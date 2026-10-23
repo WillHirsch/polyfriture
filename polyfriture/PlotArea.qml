@@ -65,11 +65,12 @@ Item {
 
             Text {
                 id: mouseText
+                objectName: "plot-tracker-text"
 
-                property double dataX: scopePlotArea.horizontal_axis.coordinate_transform.toPlot(crosshair.relativePosX)
-                property double dataY: scopePlotArea.vertical_axis.coordinate_transform.toPlot(1. - crosshair.relativePosY)
-
-                text: scopePlotArea.horizontal_axis.formatTracker(dataX)  + ", " + scopePlotArea.vertical_axis.formatTracker(dataY)
+                // Read the notified transforms directly so a live axis swap
+                // refreshes formatting even if its numeric value is unchanged.
+                text: scopePlotArea.horizontal_axis.formatTracker(scopePlotArea.horizontal_axis.coordinate_transform.toPlot(crosshair.relativePosX))
+                    + ", " + scopePlotArea.vertical_axis.formatTracker(scopePlotArea.vertical_axis.coordinate_transform.toPlot(1. - crosshair.relativePosY))
                 color: systemPalette.windowText
             }
         }

@@ -216,6 +216,11 @@ class Spectrogram_Widget(QObject):
             channel.frequency_resampler.setfreqscale(freqscale)
         self._clear_history()
 
+    def setrotated(self, rotated):
+        # Orientation changes geometry only. Keep canonical time/frequency
+        # histories and clocks, just as for an ordinary panel resize.
+        self.PlotZoneImage.setrotated(rotated)
+
     def _update_fft_parameters(self):
         self.update_weighting()
         self.freq = self.proc.get_freq_scale()
