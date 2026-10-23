@@ -29,16 +29,43 @@ class Scope_Data(QtCore.QObject):
     show_color_axis_changed = QtCore.pyqtSignal(bool)
     show_legend_changed = QtCore.pyqtSignal(bool)
     plot_items_changed = QtCore.pyqtSignal()
+    label_changed = QtCore.pyqtSignal(str)
+    channels_changed = QtCore.pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, axes=None):
         super().__init__(parent)
 
         self._plot_items = []
-        self._horizontal_axis = Axis(self)
-        self._vertical_axis = Axis(self)
-        self._color_axis = Axis(self)
+        self._label = ""
+        self._channels = []
+        self._horizontal_axis = axes.horizontal_axis if axes is not None else Axis(self)
+        self._vertical_axis = axes.vertical_axis if axes is not None else Axis(self)
+        self._color_axis = axes.color_axis if axes is not None else Axis(self)
         self._show_color_axis = False
         self._show_legend = True
+
+    @pyqtProperty(str, notify=label_changed)
+    def label(self):
+        return self._label
+
+    @label.setter
+    def label(self, label):
+        if label != self._label:
+            self._label = label
+            self.label_changed.emit(label)
+
+    @pyqtProperty(QQmlListProperty, notify=channels_changed)
+    def channels(self):
+        return QQmlListProperty(QObject, self, self._channels)
+
+    def set_channels(self, channels):
+        """Publish views atomically; their panel/controller retains ownership.
+
+        Publish before disposing removed channel states, so QML can release its
+        delegates while their models are still alive.
+        """
+        self._channels = list(channels)
+        self.channels_changed.emit()
 
     @pyqtProperty(QQmlListProperty, notify=plot_items_changed) # type: ignore
     def plot_items(self):
