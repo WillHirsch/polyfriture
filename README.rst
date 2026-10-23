@@ -26,6 +26,11 @@ Spectrogram settings offer a clockwise 90-degree rotation, with frequency increa
 rightward and newest audio at the bottom. The channel grid is transposed while
 labels remain upright; the global grid column count becomes the rotated row count.
 
+New profiles start with Level Meter, FFT Spectrum, Spectrogram and Octave Spectrum
+panels. Channel grids fill bottom-to-top, then left-to-right; the global column
+setting controls plots within each panel. Panels may be added, changed or closed
+independently, with one parameter set per panel shared by its channels.
+
 This program can be useful to analyze and equalize the audio response of a hall, or for educational purposes, etc.
 
 Friture was created by Timothée Lecomte and contributors.

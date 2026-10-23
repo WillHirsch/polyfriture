@@ -6,13 +6,14 @@ above every rectangle. Row Y scales, column X scales and the optional colorbar
 are outside the data delegates. Every cell references the panel's same axes,
 so ranges, transforms and color normalization are shared.
 
-The global **Columns per channel grid** setting defaults to two. It is saved
+The global **Columns within each panel** setting defaults to two. It is saved
 as `AudioBackend/channelGridColumns` with the other global display preferences
 and exposed as `Store.channel_grid_columns`. It changes all grids immediately;
 it does not rearrange whole panels. The editor accepts positive integers up
 to Qt's integer range, without an additional layout or channel-count cap.
-Panel conversions use this component in their respective roadmap changes;
-existing single-plot panels and scopes keep their current layouts.
+FFT Spectrum, 2D Spectrogram, Octave Spectrum, Long-time Levels, Pitch Tracker
+and Level Meter use this component. Scope overlays all selected channels on
+one plot; Generator remains an output utility.
 
 ## Placement
 
@@ -27,9 +28,14 @@ three columns therefore appear as:
 ```
 
 `placements` exposes `{column, rowFromBottom}` coordinates. This bottom-left
-coordinate system keeps the bottom and left boundaries populated and provides
-the coordinates needed by the later spectrogram-transpose change. There are
+coordinate system keeps the bottom and left boundaries populated. There are
 no delegates or axes for empty slots above shorter columns.
+
+The Spectrogram panel can rotate clockwise by 90 degrees. Frequency increases
+rightward and newest audio appears at the bottom, with labels remaining
+upright. This transposes the occupied cell coordinates: the global column
+count becomes the rotated row count. The panel still uses one shared colorbar
+and equal data rectangles, and changing orientation preserves its history.
 
 ## Delegate contract
 

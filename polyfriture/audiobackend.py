@@ -452,6 +452,11 @@ class __AudioBackend(QtCore.QObject):
         if not self.running or self.stream is None or self.action is None or self.ringBuffer is None:
             return
 
+        # Capture keeps producing while synchronous panel slots process each
+        # block. Yield to Qt after one block's worth of wall time so catch-up
+        # cannot monopolize the GUI thread when processing falls behind. Leave
+        # unread samples queued for the next display tick.
+        deadline = time.monotonic() + FRAMES_PER_BUFFER / SAMPLING_RATE
         while self.ringBuffer.read_available >= FRAMES_PER_BUFFER:
             configuration = self.channel_configuration
             ringbuffer = self.ringBuffer
@@ -498,6 +503,8 @@ class __AudioBackend(QtCore.QObject):
             self.chunk_number += 1
             # A direct signal handler can reconfigure capture during delivery.
             if ringbuffer is not self.ringBuffer or configuration is not self.channel_configuration or not self.running:
+                break
+            if time.monotonic() >= deadline:
                 break
 
     def get_stream_time(self) -> float:

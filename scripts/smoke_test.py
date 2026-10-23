@@ -89,6 +89,28 @@ def log_file_path():
     return os.path.join(log_directory(), LOG_FILENAME)
 
 
+def _log_snapshot(path):
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    return stat.st_dev, stat.st_ino, stat.st_size
+
+
+def _read_run_log(path, snapshot):
+    """Read only bytes written by this launch, allowing normal log rotation."""
+    try:
+        with open(path, "rb") as log:
+            stat = os.fstat(log.fileno())
+            if snapshot is not None:
+                device, inode, size = snapshot
+                if (stat.st_dev, stat.st_ino) == (device, inode) and stat.st_size >= size:
+                    log.seek(size)
+            return log.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
 def main():
     if len(sys.argv) < 2:
         print("usage: smoke_test.py <binary> [app args...]")
@@ -104,9 +126,10 @@ def main():
     # Keep Qt chatty output quiet so stderr only surfaces real problems.
     env.setdefault("QT_LOGGING_RULES", "qt.qpa.*=false")
 
-    # Snapshot the log so we only inspect entries produced by this run (the log
-    # is append-only across runs).
-    pre_mtime = os.path.getmtime(log_path) if os.path.exists(log_path) else 0.0
+    # An earlier successful launch must not satisfy this run's startup checks.
+    # Track the byte offset and identity: RotatingFileHandler may replace the
+    # file during startup, in which case the new file belongs to this launch.
+    snapshot = _log_snapshot(log_path)
 
     print("---- SMOKE TEST ----")
     print("binary : %s" % binary)
@@ -145,16 +168,8 @@ def main():
 
     elapsed = time.time() - started
 
-    log_text = ""
-    if os.path.exists(log_path):
-        try:
-            if os.path.getmtime(log_path) >= pre_mtime:
-                with open(log_path, "r", encoding="utf-8", errors="replace") as fh:
-                    log_text = fh.read()
-        except OSError:
-            pass
-
-    combined = log_text + "\n" + (stderr or "")
+    log_text = _read_run_log(log_path, snapshot)
+    combined = log_text + "\n" + (stdout or "") + "\n" + (stderr or "")
 
     banner_seen = banner in log_text
     full_init = FULL_INIT_LINE in log_text
@@ -171,15 +186,10 @@ def main():
         print("---- stderr (tail) ----")
         print(stderr[-1500:])
 
-    # Pass only when the bundle booted far enough to reach the Qt main event
-    # loop and emit Friture's "Init finished, entering the main loop" line.
-    # Reaching that line implies the startup banner was printed, the audio
-    # backend opened a stream, the default docks were constructed and the
-    # QML/Python stacks all loaded -- i.e. the bundle is genuinely intact.
-    # A crash before line 216 (e.g. a missing data file caught by the app's
-    # own exception handler) leaves full_init unset and fails the test, rather
-    # than false-passing on a hung-but-crashed process.
-    ok = full_init and banner_seen and fatal is None
+    # Startup can succeed without audio hardware. The default docks and QML
+    # stack must load, and the process must survive until our timeout or exit
+    # cleanly: a native crash immediately after full init is still a failure.
+    ok = full_init and banner_seen and fatal is None and (timed_out or rc == 0)
 
     if not ok and log_text:
         print("---- log tail ----")

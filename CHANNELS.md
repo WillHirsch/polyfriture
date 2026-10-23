@@ -16,18 +16,28 @@ application launches.
 `AudioBackend().select_channels(ids)` accepts a nonempty subset, normalizes
 order and duplicates, and rejects noninteger or out-of-range IDs. It raises
 `ValueError` without changing capture on invalid input or when no device is
-configured. The current single/two-channel settings dialog remains in place
-until every retained visualization supports arbitrary counts. Its adapters
-use the same ordered subset contract; selecting one physical input twice
-produces one row. Arbitrary subset persistence and the multiselection UI are
-later roadmap work.
+configured. The settings dialog presents a scrollable checklist for the active
+device and prevents unchecking its last selected channel. The same ordered
+subset reaches every input visualization; Scope overlays its channels and
+triggers from the first selected physical input.
+
+Saved profiles contain the requested raw device name, host API and selected
+physical IDs. Device order, default markers and channel-count changes do not
+change that identity. A missing or ambiguous device keeps the active fallback;
+missing channels use the available subset, or Channel 1 if none remain.
+The dialog explains the fallback and preserves the requested profile until
+an explicit device or channel choice replaces it. Device discovery happens at
+startup, so reconnecting an unavailable device requires restarting the app.
+Schema upgrades convert the legacy single/dual pair for both existing profiles
+and the one-time, read-only import from Friture.
 
 ## A configuration boundary
 
 Each effective selection or device change creates a strictly newer
-`generation`. Re-selecting the same subset or device is a no-op. A change to
-the inactive second-channel preference does not change the captured subset.
-Startup without an available device has no configuration.
+`generation`. Re-selecting the same subset or device is a no-op for capture;
+explicitly choosing the active fallback still adopts it as the saved request.
+Startup without an available device has no configuration and leaves the
+settings dialog available for choosing a usable input.
 
 Changes happen on the GUI thread, in this order:
 
@@ -51,7 +61,7 @@ replaced panels disconnect both data and configuration subscriptions.
 ## Panel contract
 
 A panel has one shared set of analysis and display parameters for all selected
-channels. As panels are generalized, each channel owns its mutable processing
+channels. Each channel owns its mutable processing
 state: filter overlaps, smoothing, peaks, cursors and histories. A setting
 change applies uniformly to every channel. Each panel implements
 `reset_channel_state(configuration)`; it clears that state and its displayed

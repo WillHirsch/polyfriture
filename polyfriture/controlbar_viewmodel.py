@@ -1,4 +1,5 @@
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtProperty, pyqtSlot  # type: ignore
+from polyfriture.widgetdict import widgets
 
 class ControlBarViewModel(QObject):
     indexChanged = pyqtSignal(int)
@@ -13,6 +14,10 @@ class ControlBarViewModel(QObject):
 
     def getCurrentIndex(self):
         return self._currentIndex
+
+    @pyqtProperty("QStringList", constant=True)
+    def widgetNames(self):
+        return [widget["Name"] for widget in widgets]
 
     def setCurrentIndex(self, index):
         if self._currentIndex != index:

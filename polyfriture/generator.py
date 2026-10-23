@@ -65,9 +65,9 @@ class Generator_Widget(QObject):
 
         self.audiobuffer = None
 
-        self.generators = [generator(parent) for generator in GENERATOR_TYPES]
+        self.generators = [generator(self) for generator in GENERATOR_TYPES]
 
-        self._view_model = Generator_View_Model(parent, self.generators)
+        self._view_model = Generator_View_Model(self, self.generators)
         self._view_model.stateChanged.connect(self.start_stop_button_toggle)
 
         self.t = 0.
@@ -261,6 +261,8 @@ class Generator_Widget(QObject):
         out_data[:] = intdata
 
     def cleanup(self):
+        self.settings_dialog.close()
+        self.settings_dialog.deleteLater()
         if self.stream is not None:
             try:
                 self.stream.stop()
