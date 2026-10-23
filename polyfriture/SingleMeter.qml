@@ -1,16 +1,23 @@
-import QtQuick 2.9
-import QtQuick.Layouts 1.15
-import QtQuick.Shapes 1.15
+import QtQuick 2.15
 import "iec.js" as IECFunctions
 
 Rectangle {
+    id: meter
+    anchors.fill: parent
     color: "black"
-    implicitWidth: 16
-
-    required property double levelMax
-    required property double levelRms
-    required property double levelIECMaxBallistic
-    required property int topOffset
+    clip: true
+    required property real levelMax
+    required property real levelRms
+    required property real levelIECMaxBallistic
+    function fraction(value) { return Math.max(0, Math.min(1, value)); }
+    function peakColor(value) {
+        if (value > .8) return "#F00014";
+        if (value > .7) return "#F0A014";
+        if (value > .6) return "#DCDC14";
+        if (value > .4) return "#A0DC14";
+        if (value > .2) return "#28A028";
+        return "#20B020";
+    }
 
     Gradient {
         id: maxGradient
@@ -20,89 +27,40 @@ Rectangle {
         GradientStop { position: 0.6; color: "#A0DC14" }
         GradientStop { position: 0.8; color: "#28A028" }
     }
-
     Gradient {
         id: rmsGradient
         GradientStop { position: 0.0; color: "#E6E6FF" }
         GradientStop { position: 0.7; color: "#0000FF" }
         GradientStop { position: 1.0; color: "#000096" }
     }
-
     Item {
-        implicitWidth: parent.width
-        implicitHeight: IECFunctions.dB_to_IEC(levelMax) * (parent.height - topOffset)
+        width: parent.width
+        height: meter.fraction(IECFunctions.dB_to_IEC(meter.levelMax)) * parent.height
         anchors.bottom: parent.bottom
         clip: true
-
         Rectangle {
-            implicitWidth: parent.width
-            implicitHeight: parent.parent.height
+            width: parent.width
+            height: meter.height
             anchors.bottom: parent.bottom
-
-            // this item must be static so that the gradient is not permanently redrawn
             gradient: maxGradient
         }
     }
-
     Item {
-        implicitWidth: parent.width
-        implicitHeight: IECFunctions.dB_to_IEC(levelRms) * (parent.height - topOffset)
+        width: parent.width
+        height: meter.fraction(IECFunctions.dB_to_IEC(meter.levelRms)) * parent.height
         anchors.bottom: parent.bottom
         clip: true
-
         Rectangle {
-            implicitWidth: parent.width
-            implicitHeight: parent.parent.height
+            width: parent.width
+            height: meter.height
             anchors.bottom: parent.bottom
-
-            // this item must be static so that the gradient is not permanently redrawn
             gradient: rmsGradient
         }
     }
-
-    Shape {
+    Rectangle {
         width: parent.width
-        x: 0
-        y: topOffset
-
-        ShapePath {
-            strokeWidth: 1
-            strokeColor: "gray"
-            startX: 0; startY: 0
-            PathLine { x: 16; y: 0 }
-        }
-    }
-
-    Shape {
-        width: parent.width
-        x: 0
-        y: pathY(levelIECMaxBallistic)
-
-        ShapePath {
-            strokeWidth: 1
-            strokeColor: iec_to_color(levelIECMaxBallistic)
-            startX: 0; startY: 0
-            PathLine { x: 16; y: 0 }
-
-            function iec_to_color(iec) {
-                if (iec > 0.8) {
-                    return "#F00014"
-                } else if (iec > 0.7) {
-                    return "#F0A014"
-                } else if (iec > 0.6) {
-                    return "#DCDC14"
-                } else if (iec > 0.4) {
-                    return "#A0DC14"
-                } else if (iec > 0.2) {
-                    return "#28A028"
-                } else {
-                    return "#20B0020"
-                }
-            }
-        }
-
-        function pathY(iec) {
-            return Math.round((parent.height - topOffset) * (1. - iec) + topOffset)
-        }
+        height: 1
+        y: Math.min(meter.height - 1, (1 - meter.fraction(meter.levelIECMaxBallistic)) * meter.height)
+        color: meter.peakColor(meter.levelIECMaxBallistic)
     }
 }

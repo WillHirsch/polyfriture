@@ -146,7 +146,41 @@ def _upgrade_to_v2(values: dict[str, Any]) -> None:
     values[names_key] = retained_names
 
 
-UPGRADES = (_upgrade_to_v1, _upgrade_to_v2)
+def _v2_meter_widget(value: Any) -> bool:
+    # Freeze the meter panel's initial integer/INI representations independently
+    # of future widget registries and owner validation rules.
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return value == 9
+    if isinstance(value, str) and re.fullmatch(r"[+-]?\d+", value.strip()):
+        try:
+            return int(value) == 9
+        except ValueError:
+            pass
+    return False
+
+
+def _upgrade_to_v3(values: dict[str, Any]) -> None:
+    """Keep the former permanent meters as an ordinary removable panel."""
+    names_key = "Docks/dockNames"
+    if names_key not in values:
+        # Fresh/default layouts include the meter panel without materializing
+        # an otherwise absent layout in the persisted profile.
+        return
+    names = _v0_dock_names(values[names_key])
+    if names is None or any(_v2_meter_widget(values.get(f"Docks/{name}/type")) for name in names):
+        return
+    suffix = 1
+    name = "Meters"
+    while name in names or any(key == f"Docks/{name}" or key.startswith(f"Docks/{name}/") for key in values):
+        suffix += 1
+        name = f"Meters {suffix}"
+    values[names_key] = [name, *names]
+    values[f"Docks/{name}/type"] = 9
+
+
+UPGRADES = (_upgrade_to_v1, _upgrade_to_v2, _upgrade_to_v3)
 CURRENT_VERSION = len(UPGRADES)
 
 

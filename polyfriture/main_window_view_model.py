@@ -21,7 +21,6 @@
 from PyQt6 import QtCore
 from PyQt6.QtCore import QObject, pyqtProperty  # type: ignore
 
-from polyfriture.level_view_model import LevelViewModel
 from polyfriture.main_toolbar_view_model import MainToolbarViewModel
 
 class MainWindowViewModel(QtCore.QObject):
@@ -29,12 +28,7 @@ class MainWindowViewModel(QtCore.QObject):
         super().__init__(parent)
 
         self._toolbar_view_model = MainToolbarViewModel(self)
-        self._level_view_model = LevelViewModel(self)
 
     @pyqtProperty(QObject, constant=True) # type: ignore
     def toolbar_view_model(self):
         return self._toolbar_view_model
-
-    @pyqtProperty(QObject, constant=True) # type: ignore
-    def level_view_model(self):
-        return self._level_view_model

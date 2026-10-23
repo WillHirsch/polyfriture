@@ -10,14 +10,17 @@ Item {
 
     required property Axis vertical_axis
     required property Axis horizontal_axis
+    property bool decorationsVisible: true
 
     default property alias content: plotItemPlaceholder.children
 
     PlotBackground {
+        visible: scopePlotArea.decorationsVisible
         anchors.fill: parent
     }
 
     PlotGrid {
+        visible: scopePlotArea.decorationsVisible
         anchors.fill: parent
 
         vertical_scale_division: scopePlotArea.vertical_axis.scale_division
@@ -33,6 +36,7 @@ Item {
 
     Rectangle {
         id: plotBorder
+        visible: scopePlotArea.decorationsVisible
         anchors.fill: parent
         border.color: systemPalette.mid
         border.width: 1
@@ -42,7 +46,7 @@ Item {
     Item
     {
         id: crosshair
-        visible: plotMouseArea.pressed
+        visible: scopePlotArea.decorationsVisible && plotMouseArea.pressed
         anchors.fill: parent
 
         property double posX: Math.min(Math.max(plotMouseArea.mouseX, 0), scopePlotArea.width)
@@ -85,6 +89,7 @@ Item {
 
     MouseArea {
         id: plotMouseArea
+        enabled: scopePlotArea.decorationsVisible
         anchors.fill: parent
         cursorShape: Qt.CrossCursor
     }

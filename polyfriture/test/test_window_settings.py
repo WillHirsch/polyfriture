@@ -41,7 +41,8 @@ def test_historical_conversion_preserves_invalid_type_for_owner_recovery(setting
     settings.setValue("CentralWidget/type", 2)
     values = {key: settings.value(key) for key in settings.allKeys()}
     apply_upgrades(values, 0)
-    assert values["Docks/dockNames"] == ["central", "Bad type"]
+    assert values["Docks/dockNames"] == ["Meters", "central", "Bad type"]
+    assert values["Docks/Meters/type"] == 9
     assert values["Docks/Bad type/extension"] == "retained"
     assert values["Docks/central/type"] == 2
     assert "CentralWidget/type" not in values

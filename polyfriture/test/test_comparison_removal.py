@@ -45,7 +45,7 @@ def test_retired_panels_are_removed_without_changing_surviving_settings(settings
 
     initialize_profile(settings)
 
-    assert settings.value("Docks/dockNames") == ["scope", "levels", "pitch"]
+    assert settings.value("Docks/dockNames") == ["Meters", "scope", "levels", "pitch"]
     assert settings.value("Docks/widgetIdStack") == [7, 8, 2]
     for group in ("Docks/delay", "Docks/old-level", "Docks/lastSettings/6"):
         assert not any(key.startswith(group + "/") for key in settings.allKeys())
@@ -73,7 +73,7 @@ def test_retired_central_panel_is_removed_after_legacy_relocation(settings, widg
 
     initialize_profile(settings)
 
-    assert settings.value("Docks/dockNames") == ["spectrum"]
+    assert settings.value("Docks/dockNames") == ["Meters", "spectrum"]
     assert settings.value("Docks/spectrum/fftSize") == 9
     assert not any(key.startswith(("CentralWidget/", "Docks/central/")) for key in settings.allKeys())
 
@@ -86,7 +86,7 @@ def test_retired_legacy_central_panel_preserves_existing_central_panel(settings)
 
     initialize_profile(settings)
 
-    assert settings.value("Docks/dockNames") == ["central"]
+    assert settings.value("Docks/dockNames") == ["Meters", "central"]
     assert settings.value("Docks/central/type") == 7
     assert settings.value("Docks/central/history_length") == 600
     assert not settings.contains("CentralWidget/type")
@@ -106,7 +106,7 @@ def test_singleton_ini_dock_names_keep_surviving_panel(settings, central):
 
     initialize_profile(loaded)
 
-    assert loaded.value("Docks/dockNames") == ["spectrum"]
+    assert loaded.value("Docks/dockNames") == ["Meters", "spectrum"]
     assert loaded.value("Docks/spectrum/type") == 2
     assert loaded.value("Docks/spectrum/fftSize") == 9
 
@@ -140,7 +140,7 @@ def test_cleanup_preserves_unrecognized_stack_types_and_removes_retired_cache(se
 
 
 @pytest.mark.parametrize("central", [False, True])
-def test_all_retired_layout_restores_empty_without_substitute_panels(settings, central):
+def test_all_retired_layout_restores_only_the_former_permanent_meters(settings, central):
     if central:
         settings.setValue("CentralWidget/type", 6)
     else:
@@ -151,23 +151,29 @@ def test_all_retired_layout_restores_empty_without_substitute_panels(settings, c
 
     initialize_profile(settings)
 
-    # Read the persisted representation, including QSettings' empty-list encoding.
+    # Read the persisted representation after retirement and meter migration.
     restored = QSettings(settings.fileName(), QSettings.Format.IniFormat)
     restored.beginGroup("Docks")
+    host = SimpleNamespace(qml_engine=object())
     manager = SimpleNamespace(docks=[], last_widget_stack=[], last_settings={}, logger=Mock(),
-                              settings_model=DockLayoutSettings())
+                              settings_model=DockLayoutSettings(), parent=lambda: host)
+    # The new meter replaces the old permanent component. Retiring the delay
+    # layout must still never substitute unrelated analyzer panels or open audio.
     with patch("polyfriture.dockmanager.Dock") as dock:
         DockManager.restoreState(manager, restored)
-        dock.assert_not_called()
-    assert manager.docks == []
+        dock.assert_called_once_with(host, "Meters", host.qml_engine, 9)
+        dock.return_value.restoreState.assert_called_once_with(restored)
+        assert manager.docks == [dock.return_value]
+    assert restored.value("Meters/type") == 9
     assert manager.last_widget_stack == []
     assert manager.last_settings == {}
 
 
 def test_panel_registry_keeps_surviving_numeric_ids():
-    assert widgetIds() == [1, 2, 3, 4, 5, 7, 8]
+    assert widgetIds() == [1, 2, 3, 4, 5, 7, 8, 9]
     assert getWidgetById(7)["Name"] == "Long-time levels"
     assert getWidgetById(8)["Name"] == "Pitch Tracker"
+    assert getWidgetById(9)["Name"] == "Level meters"
 
 
 @pytest.fixture(scope="session")

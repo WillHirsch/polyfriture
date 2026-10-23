@@ -173,7 +173,7 @@ Rectangle {
         obj = component.create()
         self.assertTrue(obj.property('has_toolbar'))
         self.assertTrue(obj.property('recording'))
-        self.assertTrue(obj.property('has_level_vm'))
+        self.assertFalse(obj.property('has_level_vm'))
 
     def test_child_context_viewModel_not_overwriting_root(self):
         """Verify that child context context properties don't interfere with root context."""
@@ -353,7 +353,7 @@ Rectangle {
                          f"Component errors: {[e.toString() for e in component.errors()]}")
         obj = component.create()
         self.assertTrue(obj.property('has_toolbar'))
-        self.assertTrue(obj.property('has_level'))
+        self.assertFalse(obj.property('has_level'))
 
     def test_axis_scale_division(self):
         """Verify Axis.scale_division is accessible from QML."""

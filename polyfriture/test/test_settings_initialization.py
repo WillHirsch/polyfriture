@@ -171,7 +171,8 @@ def test_import_preserves_nested_values_and_leaves_source_unchanged(stores):
 
     initialize_settings(fork, friture_source)
 
-    for key, value in before.items():
+    expected = {**before, "Docks/dockNames": ["Meters", "Dock 2", "Dock 7"], "Docks/Meters/type": 9}
+    for key, value in expected.items():
         assert fork.value(key) == value
     assert isinstance(fork.value("MainWindow/windowGeometry"), QByteArray)
     assert snapshot(friture_source) == before
@@ -234,7 +235,8 @@ def test_import_accepts_float_sweep_frequencies_saved_by_friture(stores):
     initialize_settings(fork, friture_source)
 
     assert_complete(fork, "imported")
-    for key, value in values.items():
+    expected = {**values, "Docks/dockNames": ["Meters", "Dock 1"], "Docks/Meters/type": 9}
+    for key, value in expected.items():
         assert fork.value(key) == value
 
 
@@ -252,7 +254,7 @@ def test_first_schema_upgrade_moves_central_widget_and_removes_obsolete_level_do
 
     initialize_settings(fork, friture_source)
 
-    assert fork.value("Docks/dockNames") == ["central", "Existing scope"]
+    assert fork.value("Docks/dockNames") == ["Meters", "central", "Existing scope"]
     assert fork.value("Docks/central/type", type=int) == 2
     assert fork.value("Docks/central/customNested/value") == "central settings"
     assert not any(key.startswith("CentralWidget/") for key in fork.allKeys())
@@ -288,7 +290,7 @@ def test_singleton_ini_layout_import_upgrades_before_normal_owner_restoration(tm
     fork.beginGroup("Docks")
     layout.restore(fork)
     fork.endGroup()
-    assert layout.get("dockNames") == ["central"]
+    assert layout.get("dockNames") == ["Meters", "central"]
     panel_type = DockSettings()
     spectrum = SpectrumSettings()
     fork.beginGroup("Docks/central")
@@ -335,7 +337,7 @@ def test_retired_features_are_cleaned_for_imported_and_existing_profiles(stores,
 
     initialize_settings(fork, friture_source)
 
-    assert fork.value("Docks/dockNames") == ["Spectrum", "Pitch"]
+    assert fork.value("Docks/dockNames") == ["Meters", "Spectrum", "Pitch"]
     assert fork.value("Docks/widgetIdStack") == [2, 8]
     assert not fork.contains("AudioBackend/showPlayback")
     assert not fork.contains("AudioBackend/historyLength")
@@ -366,22 +368,49 @@ def test_first_schema_upgrade_does_not_replace_existing_central_dock(stores):
 
     initialize_settings(fork, friture_source)
 
-    assert fork.value("Docks/dockNames") == ["central"]
+    assert fork.value("Docks/dockNames") == ["Meters", "central"]
     assert fork.value("Docks/central/type", type=int) == 1
     assert fork.value("Docks/central/custom") == "keep"
     assert not fork.contains("CentralWidget/type")
 
 
-def test_first_schema_upgrade_preserves_intentionally_empty_dock_lists(stores):
+def test_former_empty_layout_retains_only_the_previously_permanent_meters(stores):
     fork, friture_source = stores
     write_values(friture_source, {"Docks/dockNames": None, "Docks/widgetIdStack": None})
 
     initialize_settings(fork, friture_source)
 
     assert fork.contains("Docks/dockNames")
-    assert fork.value("Docks/dockNames") in (None, [])
+    assert fork.value("Docks/dockNames") == ["Meters"]
+    assert fork.value("Docks/Meters/type") == 9
     assert fork.value("Docks/widgetIdStack") in (None, [])
     assert_complete(fork, "imported")
+
+
+@pytest.mark.parametrize("existing_version", [None, 0, 1, 2])
+def test_meter_panel_upgrade_runs_once_for_imported_and_existing_layouts(stores, existing_version):
+    fork, source = stores
+    values = {"Docks/dockNames": ["Scope", "Spectrum"], "Docks/Scope/type": 1,
+              "Docks/Spectrum/type": 2, "Docks/Scope/custom": QByteArray(b"retained")}
+    if existing_version is None:
+        write_values(source, values)
+    else:
+        write_values(fork, {**values, SCHEMA_VERSION_KEY: existing_version,
+                            FRITURE_IMPORT_STATE_KEY: "existing"})
+    source_before = snapshot(source)
+
+    initialize_settings(fork, source)
+
+    assert fork.value("Docks/dockNames") == ["Meters", "Scope", "Spectrum"]
+    assert fork.value("Docks/Meters/type") == 9
+    assert fork.value("Docks/Scope/custom") == QByteArray(b"retained")
+    assert_complete(fork, "imported" if existing_version is None else "existing")
+    assert snapshot(source) == source_before
+    # The new ordinary panel can be closed permanently after the one upgrade.
+    fork.setValue("Docks/dockNames", ["Scope", "Spectrum"])
+    fork.sync()
+    initialize_settings(fork, source)
+    assert fork.value("Docks/dockNames") == ["Scope", "Spectrum"]
 
 
 @pytest.mark.parametrize("owner_type,group,values,recovered,preserved", [
@@ -625,7 +654,7 @@ def test_native_stores_import_qt_values_without_touching_application_namespaces(
         initialize_settings(fork, friture_source)
 
         assert fork.value("MainWindow/windowGeometry") == QByteArray(b"\x00\xfe\xff")
-        assert fork.value("Docks/dockNames") == ["Dock 1"]
+        assert fork.value("Docks/dockNames") == ["Meters", "Dock 1"]
         assert fork.value("AudioBackend/firstChannel", type=int) == 4
         assert snapshot(friture_source) == before
         assert_complete(fork, "imported")
@@ -687,8 +716,10 @@ def test_windows_import_falls_back_to_store_and_never_reimports(stores, monkeypa
     initialize_settings(fork)
 
     for key, value in values.items():
-        if key != SCHEMA_VERSION_KEY:
+        if key not in (SCHEMA_VERSION_KEY, "Docks/dockNames"):
             assert fork.value(key) == value
+    assert fork.value("Docks/dockNames") == ["Meters", "Dock 1"]
+    assert fork.value("Docks/Meters/type") == 9
     assert_complete(fork, "imported")
     before = snapshot(fork)
 

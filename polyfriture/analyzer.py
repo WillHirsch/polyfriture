@@ -50,7 +50,6 @@ from polyfriture.settings_model import SettingsModel, ValueSetting
 from polyfriture.tilelayout import TileLayout
 from polyfriture.level_view_model import LevelViewModel
 from polyfriture.level_data import LevelData
-from polyfriture.levels import Levels_Widget
 from polyfriture.main_window_view_model import MainWindowViewModel
 from polyfriture.store import GetStore, Store
 from polyfriture.scope_data import Scope_Data
@@ -199,17 +198,10 @@ class Friture(QMainWindow, ):
         self.main_tile_layout = self.quick_view.findChild(QObject, "main_tile_layout")
         assert self.main_tile_layout is not None, "Main tile layout not found in CentralWidget.qml"
 
-        self.level_widget = Levels_Widget(self, self._main_window_view_model.level_view_model)
-        self.level_widget.set_buffer(self.audiobuffer)
-        self.audiobuffer.new_data_available.connect(self.level_widget.handle_new_data)
-        self.audiobuffer.configuration_changed.connect(self.level_widget.reset_channel_state)
-        self.level_widget.reset_channel_state(self.audiobuffer.channel_configuration)
-
         self.dockmanager = DockManager(self, self.main_tile_layout)
 
         # timer ticks
         self.display_timer.timeout.connect(self.dockmanager.canvasUpdate)
-        self.display_timer.timeout.connect(self.level_widget.canvasUpdate)
         self.display_timer.timeout.connect(AudioBackend().fetchAudioData)
 
         # toolbar clicks
