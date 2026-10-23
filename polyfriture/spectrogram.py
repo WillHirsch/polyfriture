@@ -18,93 +18,76 @@
 # You should have received a copy of the GNU General Public License
 # along with Friture.  If not, see <http://www.gnu.org/licenses/>.
 
-"""Spectrogram widget, that displays a rolling 2D image of the time-frequency spectrum."""
+"""One synchronized time-frequency history per captured channel."""
 
+from fractions import Fraction
+
+import numpy as np
 from PyQt6.QtCore import QObject
-from numpy import log10, floor, zeros, float64, tile, array, ndarray
+
+from polyfriture.audiobackend import SAMPLING_RATE, FRAMES_PER_BUFFER, AudioBackend
 from polyfriture.audiobuffer import AudioBuffer
-from polyfriture.imageplot import ImagePlot
 from polyfriture.audioproc import audioproc
+from polyfriture.imageplot import ImagePlot
+import polyfriture.plotting.frequency_scales as fscales
 from polyfriture.signal.color_tranform import Color_Transform
 from polyfriture.signal.frequency_resampler import Frequency_Resampler
 from polyfriture.signal.online_linear_2D_resampler import Online_Linear_2D_resampler
-from polyfriture.signal.transform_pipeline import Transform_Pipeline  # audio processing class
-from polyfriture.spectrogram_settings import (Spectrogram_Settings_Dialog,  # settings dialog
-                                          DEFAULT_FFT_SIZE,
-                                          DEFAULT_FREQ_SCALE,
-                                          DEFAULT_MAXFREQ,
-                                          DEFAULT_MINFREQ,
-                                          DEFAULT_SPEC_MIN,
-                                          DEFAULT_SPEC_MAX,
-                                          DEFAULT_TIMERANGE,
-                                          DEFAULT_WEIGHTING)
-import polyfriture.plotting.frequency_scales as fscales
+from polyfriture.signal.transform_pipeline import Transform_Pipeline
+from polyfriture.spectrogram_settings import (
+    Spectrogram_Settings_Dialog, DEFAULT_FFT_SIZE, DEFAULT_FREQ_SCALE,
+    DEFAULT_MAXFREQ, DEFAULT_MINFREQ, DEFAULT_SPEC_MIN, DEFAULT_SPEC_MAX,
+    DEFAULT_TIMERANGE, DEFAULT_WEIGHTING,
+)
 
-from polyfriture.audiobackend import SAMPLING_RATE, FRAMES_PER_BUFFER, AudioBackend
-from fractions import Fraction
+
+class SpectrogramChannel:
+    """The mutable resampling and image history belonging to one input row."""
+
+    def __init__(self, image, panel):
+        self.image = image
+        self.frequency_resampler = Frequency_Resampler(
+            panel.freqscale, panel.minfreq, panel.maxfreq)
+        self.frequency_resampler.setfreq(panel.freq)
+        self.screen_resampler = Online_Linear_2D_resampler()
+        self.audio_pipeline = Transform_Pipeline([
+            self.frequency_resampler,
+            self.screen_resampler,
+            Color_Transform(),
+        ])
+
+    def reset(self):
+        self.screen_resampler.reset()
+        self.image.reset()
 
 
 class Spectrogram_Widget(QObject):
-
     def __init__(self, parent):
         super().__init__(parent)
-
         self.PlotZoneImage = ImagePlot(self)
-
         self.audiobuffer = None
-
-        # initialize the class instance that will do the fft
+        self._channels = {}
+        self.old_index = 0
+        self.mustRestart = False
+        self.overlap_frac = Fraction(3, 4)
+        self.overlap = float(self.overlap_frac)
         self.proc = audioproc()
-
-        self.frequency_resampler = Frequency_Resampler()
-        self.screen_resampler = Online_Linear_2D_resampler()
-        self.color_transform = Color_Transform()
-
-        self.audio_pipeline = Transform_Pipeline(
-            [
-                self.frequency_resampler,
-                self.screen_resampler,
-                self.color_transform,
-            ]
-        )
-
-        self.sfft_rate_frac = Fraction(1, 1)
-
-        self.maxfreq = DEFAULT_MAXFREQ
-        self.proc.set_maxfreq(self.maxfreq)
         self.minfreq = DEFAULT_MINFREQ
-        self.fft_size = 2 ** DEFAULT_FFT_SIZE * 32
-        self.proc.set_fftsize(self.fft_size)
+        self.maxfreq = DEFAULT_MAXFREQ
+        self.fft_size = 2 ** (DEFAULT_FFT_SIZE + 5)
         self.spec_min = DEFAULT_SPEC_MIN
         self.spec_max = DEFAULT_SPEC_MAX
         self.weighting = DEFAULT_WEIGHTING
-
-        self.update_weighting()
-        self.freq = self.proc.get_freq_scale()
-        self.frequency_resampler.setfreq(self.freq)
-
-        self.setfreqscale(fscales.Mel) # matches DEFAULT_FREQ_SCALE = 2 # Mel
-        self.frequency_resampler.setfreqrange(self.minfreq, self.maxfreq)
-
         self.timerange_s = DEFAULT_TIMERANGE
-
-        self.old_index = 0
-        self.overlap = 3. / 4.
-        self.overlap_frac = Fraction(3, 4)
-        self.dT_s = self.fft_size * (1. - self.overlap) / float(SAMPLING_RATE)
-
+        self.freqscale = fscales.ALL[DEFAULT_FREQ_SCALE]
+        self.proc.set_maxfreq(self.maxfreq)
+        self.proc.set_fftsize(self.fft_size)
+        self._update_fft_parameters()
         self.PlotZoneImage.setfreqrange(self.minfreq, self.maxfreq)
         self.PlotZoneImage.setspecrange(self.spec_min, self.spec_max)
         self.PlotZoneImage.setweighting(self.weighting)
-        self.PlotZoneImage.settimerange(self.timerange_s, self.dT_s)
-        self.update_jitter()
-
-        self.sfft_rate_frac = Fraction(SAMPLING_RATE, self.fft_size) / (Fraction(1) - self.overlap_frac) / 1000
-
-        # initialize the settings dialog
+        self.PlotZoneImage.setfreqscale(self.freqscale)
         self.settings_dialog = Spectrogram_Settings_Dialog(parent, self)
-
-        self.mustRestart = False
 
     def qml_file_name(self):
         return self.PlotZoneImage.qml_file_name()
@@ -112,157 +95,170 @@ class Spectrogram_Widget(QObject):
     def view_model(self):
         return self.PlotZoneImage.view_model()
 
-    # method
     def set_buffer(self, buffer: AudioBuffer) -> None:
         self.audiobuffer = buffer
-        self.old_index = self.audiobuffer.ringbuffer.offset
+        self.reset_channel_state(buffer.channel_configuration)
 
     def reset_channel_state(self, configuration) -> None:
         self.old_index = self.audiobuffer.ringbuffer.offset
-        self.screen_resampler.reset()
-        self.PlotZoneImage.reset()
+        images = self.PlotZoneImage.set_channels(configuration)
+        self._channels = {} if configuration is None else {
+            channel_id: SpectrogramChannel(image, self)
+            for channel_id, image in zip(configuration.channel_ids, images)
+        }
 
-    def log_spectrogram(self, sp):
-        # Note: implementing the log10 of the array in Cython did not bring
-        # any speedup.
-        # Idea: Instead of computing the log of the data, I could pre-compute
-        # a list of values associated with the colormap, and then do a search...
-        epsilon = 1e-30
-        return 10. * log10(sp + epsilon)
+    def _clear_history(self):
+        """Never mix pixels made with different analysis/display parameters.
 
-    # scale the db spectrum from [- spec_range db ... 0 db] to [0..1] (do not clip, will be down after resampling)
-    def scale_spectrogram(self, sp):
-        return (sp - self.spec_min) / (self.spec_max - self.spec_min)
+        The raster is the history cache; raw FFT history is not retained. A
+        settings change therefore starts fresh at the current audio cursor.
+        Geometry-only changes are handled by scaling the existing raster.
+        """
+        if self.audiobuffer is not None:
+            self.old_index = self.audiobuffer.ringbuffer.offset
+        for channel in self._channels.values():
+            channel.reset()
 
-    def handle_new_data(self, floatdata: ndarray) -> None:
-        # we need to maintain an index of where we are in the buffer
+    def log_spectrogram(self, spectrum):
+        return 10. * np.log10(spectrum + 1e-30)
+
+    def scale_spectrogram(self, spectrum):
+        return (spectrum - self.spec_min) / (self.spec_max - self.spec_min)
+
+    def handle_new_data(self, floatdata: np.ndarray) -> None:
+        if not self._channels:
+            return
         index = self.audiobuffer.ringbuffer.offset
-
         available = index - self.old_index
-
         if available < 0:
-            # ringbuffer must have grown or something...
-            available = 0
-            self.old_index = index
+            self._clear_history()
+            return
+        hop = self.fft_size // 4
+        realizable = available // hop
+        if realizable == 0:
+            return
 
-        # if we have enough data to add a frequency column in the time-frequency plane, compute it
-        needed = self.fft_size * (1. - self.overlap)
-        realizable = int(floor(available / needed))
+        spectra = np.zeros((len(self._channels), len(self.freq), realizable))
+        for frame in range(realizable):
+            samples = self.audiobuffer.data_indexed(self.old_index, self.fft_size)
+            data_time = self.audiobuffer.data_time(self.old_index)
+            for row in range(len(self._channels)):
+                spectra[row, :, frame] = self.proc.analyzelive(samples[row])
+            # All channels consume exactly the same audio windows and clocks.
+            self.old_index += hop
 
-        if realizable > 0:
-            spn = zeros((len(self.freq), realizable), dtype=float64)
+        for channel, spectrum in zip(self._channels.values(), spectra):
+            image = channel.image
+            height = image.screen_height()
+            channel.screen_resampler.set_height(height)
+            screen_rate = Fraction(image.screen_width(), 1) / Fraction(str(self.timerange_s * 1000))
+            channel.screen_resampler.set_ratio(self.sfft_rate_frac, screen_rate)
+            channel.frequency_resampler.setnsamples(height)
+            normalized = self.scale_spectrogram(self.log_spectrogram(spectrum) + self.w)
+            image.push(channel.audio_pipeline.push(normalized), data_time)
 
-            for i in range(realizable):
-                floatdata = self.audiobuffer.data_indexed(self.old_index, self.fft_size)
-                data_time = self.audiobuffer.data_time(self.old_index)
-
-                # for now, take the first channel only
-                floatdata = floatdata[0, :]
-
-                # FFT transform
-                spn[:, i] = self.proc.analyzelive(floatdata)
-
-                self.old_index += int(needed)
-
-            w = tile(self.w, (1, realizable))
-            norm_spectrogram = self.scale_spectrogram(self.log_spectrogram(spn) + w)
-
-            self.screen_resampler.set_height(self.PlotZoneImage.spectrogram_screen_height())
-            screen_rate_frac = Fraction(max(self.PlotZoneImage.spectrogram_screen_width(), 1), int(self.timerange_s * 1000))
-            self.screen_resampler.set_ratio(self.sfft_rate_frac, screen_rate_frac)
-            self.frequency_resampler.setnsamples(self.PlotZoneImage.spectrogram_screen_height())
-
-            data = self.audio_pipeline.push(norm_spectrogram)
-
-            # ideally we would use the time of the last frame that is really consumed by the FFT processor.
-            # it may not be the current time if we don't have enough to compute a FFT window
-            self.PlotZoneImage.push(data, data_time)
-
-            if self.mustRestart:
-                self.PlotZoneImage.restart()
-                self.mustRestart = False
-
-        # thickness of a frequency column depends on FFT size and window overlap
-        # hamming window with 75% overlap provides good quality (Perfect reconstruction,
-        # aliasing from side lobes only, 42 dB channel isolation)
-
-        # number of frequency columns that we keep depends on the time history that the user has chosen
-
-        # actual displayed spectrogram is a scaled version of the time-frequency plane
+        if self.mustRestart:
+            self.PlotZoneImage.restart()
+            self.mustRestart = False
 
     def canvasUpdate(self):
-        self.PlotZoneImage.draw()
+        # Read the stream clock once, rather than once per asynchronously
+        # painted cell. Paused images retain their previous display clock.
+        if self._channels and not self.PlotZoneImage.paused:
+            self.PlotZoneImage.draw(AudioBackend().get_stream_time())
+
+    def cleanup(self):
+        self.PlotZoneImage.set_channels(None)
+        self._channels.clear()
+        self.audiobuffer = None
+        self.settings_dialog.close()
+        self.settings_dialog.deleteLater()
 
     def update_jitter(self):
         audio_jitter = 2 * float(FRAMES_PER_BUFFER) / SAMPLING_RATE
-        analysis_jitter = self.fft_size * (1. - self.overlap) / SAMPLING_RATE
-        total_jitter = audio_jitter + analysis_jitter
-        self.PlotZoneImage.set_jitter(total_jitter)
+        self.PlotZoneImage.set_jitter(audio_jitter + self.dT_s)
 
     def pause(self):
         self.PlotZoneImage.pause()
 
     def restart(self):
-        # defer the restart until we get data from the audio source (so that a fresh lastdatatime is passed to the spectrogram image)
+        # Keep frozen until new audio has supplied a fresh shared timestamp.
         self.mustRestart = True
 
     def setminfreq(self, freq):
+        if freq == self.minfreq:
+            return
         self.minfreq = freq
-        self.PlotZoneImage.setfreqrange(self.minfreq, self.maxfreq)
-        self.frequency_resampler.setfreqrange(self.minfreq, self.maxfreq)
+        self._update_frequency_range()
 
     def setmaxfreq(self, freq):
+        if freq == self.maxfreq:
+            return
         self.maxfreq = freq
-        self.PlotZoneImage.setfreqrange(self.minfreq, self.maxfreq)
-        self.frequency_resampler.setfreqrange(self.minfreq, self.maxfreq)
         self.proc.set_maxfreq(freq)
+        self._update_frequency_range()
+
+    def _update_frequency_range(self):
+        self.PlotZoneImage.setfreqrange(self.minfreq, self.maxfreq)
         self.update_weighting()
         self.freq = self.proc.get_freq_scale()
-        self.frequency_resampler.setfreq(self.freq)
-    
+        for channel in self._channels.values():
+            channel.frequency_resampler.setfreqrange(self.minfreq, self.maxfreq)
+            channel.frequency_resampler.setfreq(self.freq)
+        self._clear_history()
+
     def setfreqscale(self, freqscale):
+        if freqscale == self.freqscale:
+            return
+        self.freqscale = freqscale
         self.PlotZoneImage.setfreqscale(freqscale)
-        self.frequency_resampler.setfreqscale(freqscale)
+        for channel in self._channels.values():
+            channel.frequency_resampler.setfreqscale(freqscale)
+        self._clear_history()
 
-    def setfftsize(self, fft_size):
-        self.fft_size = fft_size
-
-        self.proc.set_fftsize(fft_size)
+    def _update_fft_parameters(self):
         self.update_weighting()
         self.freq = self.proc.get_freq_scale()
-        self.frequency_resampler.setfreq(self.freq)
-
         self.dT_s = self.fft_size * (1. - self.overlap) / float(SAMPLING_RATE)
+        self.sfft_rate_frac = Fraction(SAMPLING_RATE, self.fft_size) / (1 - self.overlap_frac) / 1000
         self.PlotZoneImage.settimerange(self.timerange_s, self.dT_s)
-
-        self.sfft_rate_frac = Fraction(SAMPLING_RATE, self.fft_size) / (Fraction(1) - self.overlap_frac) / 1000
-
+        for channel in self._channels.values():
+            channel.frequency_resampler.setfreq(self.freq)
         self.update_jitter()
 
+    def setfftsize(self, fft_size):
+        if fft_size == self.fft_size:
+            return
+        self.fft_size = fft_size
+        self.proc.set_fftsize(fft_size)
+        self._update_fft_parameters()
+        self._clear_history()
+
     def setmin(self, value):
+        if value == self.spec_min:
+            return
         self.spec_min = value
         self.PlotZoneImage.setspecrange(self.spec_min, self.spec_max)
+        self._clear_history()
 
     def setmax(self, value):
+        if value == self.spec_max:
+            return
         self.spec_max = value
         self.PlotZoneImage.setspecrange(self.spec_min, self.spec_max)
+        self._clear_history()
 
     def setweighting(self, weighting):
+        if weighting == self.weighting:
+            return
         self.weighting = weighting
         self.PlotZoneImage.setweighting(weighting)
         self.update_weighting()
+        self._clear_history()
 
     def update_weighting(self):
-        A, B, C = self.proc.get_freq_weighting()
-        if self.weighting == 0:
-            self.w = array([0.])
-        elif self.weighting == 1:
-            self.w = A
-        elif self.weighting == 2:
-            self.w = B
-        else:
-            self.w = C
-        self.w.shape = (len(self.w), 1)
+        weightings = (np.array([0.]), *self.proc.get_freq_weighting())
+        self.w = weightings[self.weighting].reshape((-1, 1))
 
     def settings_called(self, checked):
         self.settings_dialog.show()
@@ -273,7 +269,9 @@ class Spectrogram_Widget(QObject):
     def restoreState(self, settings):
         self.settings_dialog.restoreState(settings)
 
-    # slot
     def timerangechanged(self, value):
+        if value == self.timerange_s:
+            return
         self.timerange_s = value
         self.PlotZoneImage.settimerange(self.timerange_s, self.dT_s)
+        self._clear_history()

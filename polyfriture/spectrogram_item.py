@@ -21,7 +21,6 @@
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtProperty, QRectF  # type: ignore
 from PyQt6.QtQuick import QQuickPaintedItem
 from PyQt6.QtGui import QPainter
-from polyfriture.audiobackend import AudioBackend
 from polyfriture.spectrogram_item_data import SpectrogramImageData
 
 class SpectrogramItem(QQuickPaintedItem):
@@ -31,33 +30,35 @@ class SpectrogramItem(QQuickPaintedItem):
         super().__init__(parent)
         self.setAntialiasing(True)
 
-        self._curve = SpectrogramImageData()
+        self._curve = None
+        self.widthChanged.connect(self.updateScreenSize)
+        self.heightChanged.connect(self.updateScreenSize)
 
     @pyqtProperty(QObject, notify=curveChanged)
-    def curve(self) -> SpectrogramImageData:
+    def curve(self) -> SpectrogramImageData | None:
         return self._curve
 
     @curve.setter
-    def curve(self, curve: SpectrogramImageData) -> None:
+    def curve(self, curve: SpectrogramImageData | None) -> None:
         if self._curve != curve:
+            if self._curve is not None:
+                self._curve.data_changed.disconnect(self.update)
             self._curve = curve
-            curve.data_changed.connect(self.update)
-            curve.data_changed.connect(self.updateScreenSize)
+            if curve is not None:
+                curve.data_changed.connect(self.update)
+                self.updateScreenSize()
             self.curveChanged.emit()
             if self.window():
                 self.window().update()
 
     def updateScreenSize(self) -> None:
-        self._curve.update_screen_size(self.width(), self.height())
+        if self._curve is not None:
+            self._curve.update_screen_size(self.width(), self.height())
 
     def paint(self, painter: QPainter | None) -> None:  # type: ignore
-        if self._curve.is_playing:
-            self.last_paint_time = AudioBackend().get_stream_time()
-        
-        pixmap_source_rect = self._curve.pixmap_source_rect(self.last_paint_time)
-
-        if painter is None:
+        if self._curve is None or painter is None:
             return
+        pixmap_source_rect = self._curve.pixmap_source_rect(self._curve.paint_time)
         painter.drawPixmap(
             QRectF(0, 0, self.width(), self.height()),
             self._curve.pixmap(),
