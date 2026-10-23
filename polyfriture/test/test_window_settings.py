@@ -1,19 +1,15 @@
-"""Window state and historical conversion recover malformed profiles safely."""
-
-import logging
-from types import SimpleNamespace
+"""Window restoration and versioned historical conversions tolerate bad fields."""
 
 import pytest
 from PyQt6.QtCore import QByteArray, QSettings
 
 from polyfriture import analyzer
+from polyfriture.settings_schema import apply_upgrades
 
 
 @pytest.fixture
-def settings(tmp_path, monkeypatch):
-    store = QSettings(str(tmp_path / "profile.ini"), QSettings.Format.IniFormat)
-    monkeypatch.setattr(analyzer, "application_settings", lambda: store)
-    return store
+def settings(tmp_path):
+    return QSettings(str(tmp_path / "profile.ini"), QSettings.Format.IniFormat)
 
 
 def test_invalid_geometry_does_not_discard_valid_window_state(settings):
@@ -31,7 +27,9 @@ def test_historical_conversion_leaves_malformed_layout_for_normal_recovery(setti
     settings.setValue("Docks/dockNames", ["invalid/name"])
     settings.setValue("CentralWidget/type", 2)
     before = {key: settings.value(key) for key in settings.allKeys()}
-    analyzer.Friture.migrateSettings(SimpleNamespace(logger=logging.getLogger(__name__)))
+    values = dict(before)
+    apply_upgrades(values, 0)
+    assert values == before
     assert {key: settings.value(key) for key in settings.allKeys()} == before
 
 
@@ -41,8 +39,13 @@ def test_historical_conversion_preserves_invalid_type_for_owner_recovery(setting
     settings.setValue("Docks/Bad type/extension", "retained")
     settings.setValue("Docks/Old levels/type", 0)
     settings.setValue("CentralWidget/type", 2)
-    analyzer.Friture.migrateSettings(SimpleNamespace(logger=logging.getLogger(__name__)))
-    assert settings.value("Docks/dockNames") == ["central", "Bad type"]
-    assert settings.value("Docks/Bad type/extension") == "retained"
-    assert settings.value("Docks/central/type") == 2
-    assert not settings.contains("CentralWidget/type")
+    values = {key: settings.value(key) for key in settings.allKeys()}
+    apply_upgrades(values, 0)
+    assert values["Docks/dockNames"] == ["central", "Bad type"]
+    assert values["Docks/Bad type/extension"] == "retained"
+    assert values["Docks/central/type"] == 2
+    assert "CentralWidget/type" not in values
+    assert "Docks/Old levels/type" not in values
+    # Schema preparation works on a snapshot, before initialization writes it.
+    assert settings.value("CentralWidget/type") == 2
+    assert settings.value("Docks/Old levels/type") == 0

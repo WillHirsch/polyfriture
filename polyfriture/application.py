@@ -33,7 +33,9 @@ def configure_application(app: QGuiApplication) -> None:
 
 def application_settings() -> QSettings:
     """Open only the fork's settings, independently of caller application metadata."""
-    return QSettings(ORGANIZATION_NAME, APPLICATION_NAME)
+    settings = QSettings(ORGANIZATION_NAME, APPLICATION_NAME)
+    settings.setFallbacksEnabled(False)
+    return settings
 
 
 def temporary_settings() -> QSettings:

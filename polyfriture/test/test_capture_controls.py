@@ -9,6 +9,7 @@ from PyQt6.QtCore import QSettings
 from PyQt6.QtWidgets import QApplication
 
 from polyfriture import analyzer, settings as settings_module, theme_manager
+from polyfriture.settings_initialization import initialize_settings
 
 
 @pytest.fixture(scope="session")
@@ -26,7 +27,15 @@ def profile(tmp_path, monkeypatch):
     sip.delete(settings)
 
 
-def test_migration_discards_only_playback_preferences(profile):
+@pytest.fixture
+def friture_source(tmp_path):
+    source = QSettings(str(tmp_path / "empty-friture.ini"), QSettings.Format.IniFormat)
+    source.setFallbacksEnabled(False)
+    yield source
+    sip.delete(source)
+
+
+def test_migration_discards_only_playback_preferences(profile, friture_source):
     # Invalid retired values must also be harmless and must not be interpreted.
     profile.setValue("AudioBackend/showPlayback", "invalid")
     profile.setValue("AudioBackend/historyLength", "invalid")
@@ -36,8 +45,10 @@ def test_migration_discards_only_playback_preferences(profile):
     profile.setValue("Docks/lastSettings/5/type", 5)
     profile.setValue("Docks/lastSettings/5/generator kind", 3)
 
-    analyzer.Friture.migrateSettings(None)
-    analyzer.Friture.migrateSettings(None)
+    initialize_settings(profile, friture_source)
+    first_result = {key: profile.value(key) for key in profile.allKeys()}
+    initialize_settings(profile, friture_source)
+    assert {key: profile.value(key) for key in profile.allKeys()} == first_result
 
     assert not profile.contains("AudioBackend/showPlayback")
     assert not profile.contains("AudioBackend/historyLength")
@@ -48,7 +59,7 @@ def test_migration_discards_only_playback_preferences(profile):
     assert profile.value("Docks/lastSettings/5/generator kind", type=int) == 3
 
 
-def test_window_starts_and_capture_toggles_without_playback(app, profile, monkeypatch):
+def test_window_starts_and_capture_toggles_without_playback(app, profile, friture_source, monkeypatch):
     # Keep the real window, QML, settings dialog, capture timer and dock manager;
     # substitute hardware and a fresh empty layout rather than opening devices.
     backend = Mock()
@@ -59,6 +70,7 @@ def test_window_starts_and_capture_toggles_without_playback(app, profile, monkey
     profile.setValue("Docks/dockNames", [])
     profile.setValue("AudioBackend/showPlayback", 2)
     profile.setValue("AudioBackend/historyLength", 600)
+    initialize_settings(profile, friture_source)
 
     window = analyzer.Friture()
     try:
