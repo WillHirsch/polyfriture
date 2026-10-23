@@ -24,22 +24,20 @@ from numpy import zeros, ones, log10
 import numpy
 from polyfriture.filled_curve import CurveType, FilledCurve
 from polyfriture.histplot_data import HistPlot_Data
-from polyfriture.plotting.coordinateTransform import CoordinateTransform
 import polyfriture.plotting.frequency_scales as fscales
 from polyfriture.pitch_tracker import format_frequency
-from polyfriture.store import GetStore
 
 # The peak decay rates (magic goes here :).
 PEAK_DECAY_RATE = 1.0 - 3E-6
 
 class HistPlot(QObject):
 
-    def __init__(self, parent):
+    def __init__(self, parent, *, axes=None):
         super(HistPlot, self).__init__(parent)
 
         self.logger = logging.getLogger(__name__)
 
-        self._histplot_data = HistPlot_Data(GetStore())
+        self._histplot_data = HistPlot_Data(self, axes=axes)
 
         self._curve_peak = FilledCurve(CurveType.PEEK)
         self._histplot_data.add_plot_item(self._curve_peak)
@@ -47,15 +45,16 @@ class HistPlot(QObject):
         self._curve_signal = FilledCurve(CurveType.SIGNAL)
         self._histplot_data.add_plot_item(self._curve_signal)
 
-        self._histplot_data.show_legend = False
-        self._histplot_data.vertical_axis.name = "PSD (dB A)"
-        self._histplot_data.vertical_axis.setTrackerFormatter(lambda x: "%.1f dB" % (x))
-        self._histplot_data.horizontal_axis.name = "Frequency (Hz)"
-        self._histplot_data.horizontal_axis.setTrackerFormatter(format_frequency)
-        self._histplot_data.horizontal_axis.show_minor_grid_lines = True
+        if axes is None:
+            self._histplot_data.show_legend = False
+            self._histplot_data.vertical_axis.name = "PSD (dB A)"
+            self._histplot_data.vertical_axis.setTrackerFormatter(lambda x: "%.1f dB" % (x))
+            self._histplot_data.horizontal_axis.name = "Frequency (Hz)"
+            self._histplot_data.horizontal_axis.setTrackerFormatter(format_frequency)
+            self._histplot_data.horizontal_axis.show_minor_grid_lines = True
 
-        self._histplot_data.vertical_axis.setRange(0, 1)
-        self._histplot_data.horizontal_axis.setRange(44, 22000)
+            self._histplot_data.vertical_axis.setRange(0, 1)
+            self._histplot_data.horizontal_axis.setRange(44, 22000)
 
         self.paused = False
 
@@ -63,11 +62,11 @@ class HistPlot(QObject):
         self.peak_int = zeros((3,))
         self.peak_decay = ones((3,)) * PEAK_DECAY_RATE
 
-        self.normVerticalScaleTransform = CoordinateTransform(0, 1, 1, 0, 0)
-        self.normHorizontalScaleTransform = CoordinateTransform(44, 22000, 1, 0, 0)
+        self.normVerticalScaleTransform = self._histplot_data.vertical_axis.coordinate_transform
+        self.normHorizontalScaleTransform = self._histplot_data.horizontal_axis.coordinate_transform
 
-        self.normHorizontalScaleTransform.setScale(fscales.Logarithmic)
-        self._histplot_data.horizontal_axis.setScale(fscales.Logarithmic)
+        if axes is None:
+            self._histplot_data.horizontal_axis.setScale(fscales.Logarithmic)
 
     def qml_file_name(self):
         return "HistPlot.qml"

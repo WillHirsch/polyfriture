@@ -22,150 +22,127 @@ from PyQt6.QtCore import QObject
 from numpy import log10, array, arange
 
 from polyfriture.histplot import HistPlot
-from polyfriture.octavefilters import Octave_Filters
-from polyfriture.octavespectrum_settings import (OctaveSpectrum_Settings_Dialog,  # settings dialog
-                                             DEFAULT_SPEC_MIN,
-                                             DEFAULT_SPEC_MAX,
-                                             DEFAULT_WEIGHTING,
-                                             DEFAULT_BANDSPEROCTAVE,
-                                             DEFAULT_RESPONSE_TIME)
-
-from polyfriture.filter import NOCTAVE
-
+from polyfriture.octavefilters import Octave_Filters, octave_decimations
+from polyfriture.octavespectrum_settings import (
+    OctaveSpectrum_Settings_Dialog, DEFAULT_SPEC_MIN, DEFAULT_SPEC_MAX,
+    DEFAULT_WEIGHTING, DEFAULT_BANDSPEROCTAVE, DEFAULT_RESPONSE_TIME,
+)
+from polyfriture.scope_data import Scope_Data
+from polyfriture.pitch_tracker import format_frequency
+import polyfriture.plotting.frequency_scales as fscales
 from polyfriture.signal.exp_smoothing import exp_smoothed_value
-
 from polyfriture.audiobackend import SAMPLING_RATE
 
-SMOOTH_DISPLAY_TIMER_PERIOD_MS = 25
+
+class OctaveSpectrumChannel(QObject):
+    """Independent filter tails, smoothing and held peaks for one row."""
+
+    def __init__(self, panel, label):
+        super().__init__(panel)
+        self.filters = Octave_Filters(panel.bandsperoctave)
+        self.dispbuffers = [0.] * self.filters.nbands
+        self.plot = HistPlot(self, axes=panel._grid_data)
+        self.plot.view_model().label = label
+        self.plot.paused = panel.paused
+        self.plot.reset()
 
 
 class OctaveSpectrum_Widget(QObject):
-
     def __init__(self, parent):
         super().__init__(parent)
-
         self.audiobuffer = None
-
-        self.PlotZoneSpect = HistPlot(self)
-
+        self._grid_data = Scope_Data(self)
+        self._channels = {}
+        self.paused = False
         self.spec_min = DEFAULT_SPEC_MIN
         self.spec_max = DEFAULT_SPEC_MAX
         self.weighting = DEFAULT_WEIGHTING
         self.response_time = DEFAULT_RESPONSE_TIME
-
-        self.PlotZoneSpect.setspecrange(self.spec_min, self.spec_max)
-        self.PlotZoneSpect.setweighting(self.weighting)
-
-        self.filters = Octave_Filters(DEFAULT_BANDSPEROCTAVE)
-        self.dispbuffers = [0] * DEFAULT_BANDSPEROCTAVE * NOCTAVE
-
-        # set kernel and parameters for the smoothing filter
+        self.bandsperoctave = DEFAULT_BANDSPEROCTAVE
+        self._grid_data.vertical_axis.setTrackerFormatter(lambda x: "%.1f dB" % x)
+        self._grid_data.horizontal_axis.name = "Frequency (Hz)"
+        self._grid_data.horizontal_axis.setTrackerFormatter(format_frequency)
+        self._grid_data.horizontal_axis.show_minor_grid_lines = True
+        self._grid_data.horizontal_axis.setScale(fscales.Logarithmic)
+        self._grid_data.horizontal_axis.setRange(44, 22000)
+        self._grid_data.vertical_axis.setRange(self.spec_min, self.spec_max)
+        self.setweighting(self.weighting)
         self.setresponsetime(self.response_time)
-
-        # initialize the settings dialog
         self.settings_dialog = OctaveSpectrum_Settings_Dialog(parent, self)
 
     def qml_file_name(self):
-        return self.PlotZoneSpect.qml_file_name()
-    
-    def view_model(self):
-        return self.PlotZoneSpect.view_model()
+        return "HistPlot.qml"
 
-    # method
+    def view_model(self):
+        return self._grid_data
+
     def set_buffer(self, buffer):
         self.audiobuffer = buffer
+        self.reset_channel_state(buffer.channel_configuration)
 
     def reset_channel_state(self, configuration):
-        self.filters.reset()
-        self.dispbuffers = [0] * self.filters.nbands
-        self.PlotZoneSpect.reset()
-
-    def compute_kernels(self, alphas, Ns):
-        kernels = []
-        for alpha, N in zip(alphas, Ns):
-            kernels += [(1. - alpha) ** arange(N - 1, -1, -1)]
-        return kernels
-
-    def exp_smoothed_value(self, kernel, alpha, data, previous):
-        N = len(data)
-        if N == 0:
-            return previous
-        else:
-            value = alpha * (kernel[-N:] * data).sum() + previous * (1. - alpha) ** N
-            return value
+        previous = self._channels
+        self._channels = {} if configuration is None else {
+            channel_id: OctaveSpectrumChannel(self, label)
+            for channel_id, label in zip(configuration.channel_ids, configuration.channel_labels)
+        }
+        self._grid_data.set_channels([state.plot.view_model() for state in self._channels.values()])
+        for state in previous.values():
+            state.deleteLater()
 
     def handle_new_data(self, floatdata):
-        # the behaviour of the filters functions is sometimes
-        # unexpected when they are called on empty arrays
         if floatdata.shape[1] == 0:
             return
+        for state, samples in zip(self._channels.values(), floatdata):
+            outputs, _ = state.filters.filter(samples)
+            state.dispbuffers = [
+                exp_smoothed_value(kernel, alpha, output ** 2, previous)
+                for output, kernel, alpha, previous in zip(outputs, self.kernels, self.alphas, state.dispbuffers)
+            ]
+            weights = (0., state.filters.A, state.filters.B, state.filters.C)[self.weighting]
+            levels = 10. * log10(array(state.dispbuffers) + 1e-30) + weights
+            state.plot.setdata(state.filters.flow, state.filters.fhigh, state.filters.f_nominal, levels)
 
-        # for now, take the first channel only
-        floatdata = floatdata[0, :]
-
-        # compute the filters' output
-        y, decs_unused = self.filters.filter(floatdata)
-
-        # compute the widget data
-        sp = [exp_smoothed_value(kernel, alpha, bankdata ** 2, old) for bankdata, kernel, alpha, old in zip(y, self.kernels, self.alphas, self.dispbuffers)]
-
-        # store result for next computation
-        self.dispbuffers = sp
-
-        sp = array(sp)
-
-        if self.weighting == 0:
-            w = 0.
-        elif self.weighting == 1:
-            w = self.filters.A
-        elif self.weighting == 2:
-            w = self.filters.B
-        else:
-            w = self.filters.C
-
-        epsilon = 1e-30
-        db_spectrogram = 10 * log10(sp + epsilon) + w
-        self.PlotZoneSpect.setdata(self.filters.flow, self.filters.fhigh, self.filters.f_nominal, db_spectrogram)
-
-    # method
     def canvasUpdate(self):
-        self.PlotZoneSpect.draw()
+        for state in self._channels.values():
+            state.plot.canvasUpdate()
+
+    def pause(self):
+        self.paused = True
+        for state in self._channels.values():
+            state.plot.pause()
+
+    def restart(self):
+        self.paused = False
+        for state in self._channels.values():
+            state.plot.restart()
 
     def setmin(self, value):
         self.spec_min = value
-        self.PlotZoneSpect.setspecrange(self.spec_min, self.spec_max)
+        self._grid_data.vertical_axis.setRange(min(self.spec_min, self.spec_max), max(self.spec_min, self.spec_max))
 
     def setmax(self, value):
         self.spec_max = value
-        self.PlotZoneSpect.setspecrange(self.spec_min, self.spec_max)
+        self._grid_data.vertical_axis.setRange(min(self.spec_min, self.spec_max), max(self.spec_min, self.spec_max))
 
     def setweighting(self, weighting):
         self.weighting = weighting
-        self.PlotZoneSpect.setweighting(weighting)
+        self._grid_data.vertical_axis.name = "PSD (dB%s)" % ("", " A", " B", " C")[weighting]
 
     def setresponsetime(self, response_time):
-        # time = SMOOTH_DISPLAY_TIMER_PERIOD_MS/1000. #DISPLAY
-        # time = 0.025 #IMPULSE setting for a sound level meter
-        # time = 0.125 #FAST setting for a sound level meter
-        # time = 1. #SLOW setting for a sound level meter
         self.response_time = response_time
-
-        # an exponential smoothing filter is a simple IIR filter
-        # s_i = alpha*x_i + (1-alpha)*s_{i-1}
-        # we compute alpha so that the N most recent samples represent 100*w percent of the output
-        w = 0.65
-        decs = self.filters.get_decs()
-        ns = [self.response_time * SAMPLING_RATE / dec for dec in decs]
-        Ns = [2 * 4096 / dec for dec in decs]
-        self.alphas = [1. - (1. - w) ** (1. / (n + 1)) for n in ns]
-        # print(ns, Ns)
-        self.kernels = self.compute_kernels(self.alphas, Ns)
+        decimations = octave_decimations(self.bandsperoctave)
+        ns = [response_time * SAMPLING_RATE / decimation for decimation in decimations]
+        self.alphas = [1. - (1. - 0.65) ** (1. / (n + 1)) for n in ns]
+        self.kernels = [(1. - alpha) ** arange(8192 / decimation - 1, -1, -1)
+                        for alpha, decimation in zip(self.alphas, decimations)]
 
     def setbandsperoctave(self, bandsperoctave):
-        self.filters.setbandsperoctave(bandsperoctave)
-        # recreate the ring buffers
-        self.dispbuffers = [0] * bandsperoctave * NOCTAVE
-        # reset kernel and parameters for the smoothing filter
+        self.bandsperoctave = bandsperoctave
+        for state in self._channels.values():
+            state.filters.setbandsperoctave(bandsperoctave)
+            state.dispbuffers = [0.] * state.filters.nbands
+            state.plot.reset()
         self.setresponsetime(self.response_time)
 
     def settings_called(self, checked):
@@ -176,3 +153,8 @@ class OctaveSpectrum_Widget(QObject):
 
     def restoreState(self, settings):
         self.settings_dialog.restoreState(settings)
+
+    def cleanup(self):
+        self._grid_data.set_channels([])
+        self.settings_dialog.close()
+        self.settings_dialog.deleteLater()
