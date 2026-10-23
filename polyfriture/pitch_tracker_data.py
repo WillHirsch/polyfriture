@@ -44,8 +44,8 @@ class PitchTracker_Data(Scope_Data):
 
     pitch_changed = QtCore.pyqtSignal(float)
 
-    def __init__(self, parent: QtCore.QObject):
-        super().__init__(parent)
+    def __init__(self, parent: QtCore.QObject, *, axes=None):
+        super().__init__(parent, axes=axes)
         self._pitch = 0.0
 
     @pyqtProperty(str, notify=pitch_changed)

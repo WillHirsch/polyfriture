@@ -31,13 +31,13 @@ import math as m
 import numpy as np
 from PyQt6 import QtWidgets
 from PyQt6.QtCore import QSettings, QObject
-from typing import Any, Optional
+from typing import Optional
 
 from polyfriture.audiobackend import SAMPLING_RATE
 from polyfriture.audiobuffer import AudioBuffer
 from polyfriture.audioproc import audioproc
 from polyfriture.curve import Curve
-from polyfriture.pitch_tracker_data import PitchTracker_Data, format_frequency, frequency_to_note
+from polyfriture.pitch_tracker_data import PitchTracker_Data, format_frequency
 from polyfriture.pitch_tracker_settings import (
     DEFAULT_MIN_FREQ,
     DEFAULT_MAX_FREQ,
@@ -52,117 +52,139 @@ from polyfriture.pitch_tracker_settings import (
 from polyfriture.plotting.coordinateTransform import CoordinateTransform
 import polyfriture.plotting.frequency_scales as fscales
 from polyfriture.ringbuffer import RingBuffer
-from polyfriture.store import GetStore
+from polyfriture.scope_data import Scope_Data
+
+class PitchChannel(PitchTracker_Data):
+    """One independent estimator, input cursor, history and current readout."""
+
+    def __init__(self, parent, axes, label, min_freq, max_freq, min_db, conf):
+        super().__init__(parent, axes=axes)
+        self.label = label
+        self.curve = Curve()
+        self.curve.name = label
+        self.curve.setData(np.zeros(0), np.zeros(0))
+        self.add_plot_item(self.curve)
+        self.tracker = PitchTracker(RingBuffer(), min_freq=min_freq, max_freq=max_freq,
+                                    min_db=min_db, conf=conf)
+        self.pitch = np.nan
+
 
 class PitchTrackerWidget(QObject):
     def __init__(self, parent: QtWidgets.QWidget):
         super().__init__(parent)
-
         self.logger = logging.getLogger(__name__)
-
-        self._pitch_tracker_data = PitchTracker_Data(GetStore())
-
-        self._curve = Curve()
-        self._curve.name = "Ch1" # type: ignore [assignment]
-        self._pitch_tracker_data.add_plot_item(self._curve)
-
-        # cast for qt properties which aren't properly typed
-        tracker_data: Any = self._pitch_tracker_data
-        tracker_data.vertical_axis.name = "Frequency (Hz)"
-        tracker_data.vertical_axis.setTrackerFormatter(
-            format_frequency)
-        tracker_data.vertical_axis.show_minor_grid_lines = True
-        tracker_data.horizontal_axis.name = "Time (sec)"
-        tracker_data.horizontal_axis.setTrackerFormatter(
-            lambda x: "%#.3g sec" % (x))
-
+        self._pitch_tracker_data = Scope_Data(self)
+        axes = self._pitch_tracker_data
+        axes.vertical_axis.name = "Frequency (Hz)"
+        axes.vertical_axis.setTrackerFormatter(format_frequency)
+        axes.vertical_axis.show_minor_grid_lines = True
+        axes.vertical_axis.setScale(fscales.OctaveC)
+        axes.horizontal_axis.name = "Time (sec)"
+        axes.horizontal_axis.setTrackerFormatter(lambda x: "%#.3g sec" % x)
         self.min_freq = DEFAULT_MIN_FREQ
         self.max_freq = DEFAULT_MAX_FREQ
-        self._pitch_tracker_data.vertical_axis.setRange( # type: ignore
-            self.min_freq, self.max_freq)
-        self._pitch_tracker_data.vertical_axis.setScale( # type: ignore
-            fscales.OctaveC)
-        self.vertical_transform = CoordinateTransform(
-            self.min_freq, self.max_freq, 1, 0, 0)
-        self.vertical_transform.setScale(fscales.OctaveC)
-
+        self.min_db = DEFAULT_MIN_DB
+        self.conf = DEFAULT_P_CONF
         self.duration = DEFAULT_DURATION
-        self._pitch_tracker_data.horizontal_axis.setRange( # type: ignore
-            -self.duration, 0.)
-
+        axes.vertical_axis.setRange(self.min_freq, self.max_freq)
+        axes.horizontal_axis.setRange(-self.duration, 0.)
+        self.vertical_transform = CoordinateTransform(self.min_freq, self.max_freq, 1, 0, 0)
+        self.vertical_transform.setScale(fscales.OctaveC)
+        self._channels = {}
+        self.audiobuffer: Optional[AudioBuffer] = None
         self.settings_dialog = PitchTrackerSettingsDialog(parent, self)
 
-        self.audiobuffer: Optional[AudioBuffer] = None
-        self.tracker = PitchTracker(RingBuffer())
-        self.update_curve()
-    
     def qml_file_name(self) -> str:
         return "PitchView.qml"
 
-    def view_model(self) -> PitchTracker_Data:
+    def view_model(self) -> Scope_Data:
         return self._pitch_tracker_data
 
-    # method
     def set_buffer(self, buffer: AudioBuffer) -> None:
         self.audiobuffer = buffer
-        self.tracker.set_input_buffer(buffer.ringbuffer)
+        self.reset_channel_state(buffer.channel_configuration)
 
     def reset_channel_state(self, configuration) -> None:
-        self.tracker.set_input_buffer(self.audiobuffer.ringbuffer)
-        self.tracker.reset()
-        self._curve.setData(np.zeros(0), np.zeros(0))
-        self._pitch_tracker_data.pitch = np.nan # type: ignore
+        previous = self._channels
+        self._channels = {}
+        if configuration is not None:
+            for channel_id, label in zip(configuration.channel_ids, configuration.channel_labels):
+                self._channels[channel_id] = PitchChannel(
+                    self, self._pitch_tracker_data, label, self.min_freq, self.max_freq,
+                    self.min_db, self.conf)
+        self._pitch_tracker_data.set_channels(self._channels.values())
+        for channel in previous.values():
+            channel.deleteLater()
 
     def handle_new_data(self, floatdata: np.ndarray) -> None:
-        if self.tracker.update():
-            self.update_curve()
-            self._pitch_tracker_data.pitch = self.tracker.get_latest_estimate() # type: ignore
+        if self.audiobuffer is None:
+            return
+        for row, channel in enumerate(self._channels.values()):
+            # A mono buffer keeps both spectral analysis and RMS gating local
+            # to this row; no other selected source enters its estimator.
+            channel.tracker.input_buf.push(floatdata[row:row + 1], self.audiobuffer.lastDataTime)
+            if channel.tracker.update():
+                self.update_curve(channel)
+                channel.pitch = channel.tracker.get_latest_estimate()
 
-    def update_curve(self) -> None:
-        pitches = self.tracker.get_estimates(self.duration)
-        pitches = 1.0 - self.vertical_transform.toScreen(pitches) # type: ignore
-        pitches = np.clip(pitches, 0, 1)
+    def update_curve(self, channel) -> None:
+        if not channel.tracker.out_offset:
+            return
+        pitches = channel.tracker.get_estimates(self.duration)
+        pitches = np.clip(1.0 - self.vertical_transform.toScreen(pitches), 0, 1)
         times = np.linspace(0, 1.0, pitches.shape[0])
-        self._curve.setData(times, pitches)
+        channel.curve.setData(times, pitches)
 
-    # method
+    def _set_frequency_range(self):
+        self._pitch_tracker_data.vertical_axis.setRange(self.min_freq, self.max_freq)
+        self.vertical_transform.setRange(self.min_freq, self.max_freq)
+        for channel in self._channels.values():
+            channel.tracker.min_freq = self.min_freq
+            channel.tracker.max_freq = self.max_freq
+            channel.tracker._init_swipe()
+            channel.tracker.prev_f0 = None
+            self.update_curve(channel)
+
     def canvasUpdate(self) -> None:
-        # nothing to do here
-        return
+        pass
 
     def set_min_freq(self, value: int) -> None:
         self.min_freq = value
-        self._pitch_tracker_data.vertical_axis.setRange(self.min_freq, self.max_freq) # type: ignore
-        self.vertical_transform.setRange(self.min_freq, self.max_freq)
-        self.tracker._init_swipe()  # Reinitialize kernels with new min_freq
+        self._set_frequency_range()
 
     def set_max_freq(self, value: int) -> None:
         self.max_freq = value
-        self._pitch_tracker_data.vertical_axis.setRange(self.min_freq, self.max_freq) # type: ignore
-        self.vertical_transform.setRange(self.min_freq, self.max_freq)
-        self.tracker._init_swipe()  # Reinitialize kernels with new max_freq
+        self._set_frequency_range()
 
     def set_duration(self, value: int) -> None:
         self.duration = value
-        self._pitch_tracker_data.horizontal_axis.setRange(-self.duration, 0.) # type: ignore
+        self._pitch_tracker_data.horizontal_axis.setRange(-self.duration, 0.)
+        for channel in self._channels.values():
+            self.update_curve(channel)
 
     def set_min_db(self, value: float) -> None:
-        self.tracker.min_db = value
+        self.min_db = value
+        for channel in self._channels.values():
+            channel.tracker.min_db = value
 
     def set_conf(self, value: float) -> None:
-        self.tracker.conf = value
+        self.conf = value
+        for channel in self._channels.values():
+            channel.tracker.conf = value
 
-    # slot
     def settings_called(self, checked: bool) -> None:
         self.settings_dialog.show()
 
-    # method
     def saveState(self, settings: QSettings) -> None:
         self.settings_dialog.save_state(settings)
 
-    # method
     def restoreState(self, settings: QSettings) -> None:
         self.settings_dialog.restore_state(settings)
+
+    def cleanup(self):
+        self._pitch_tracker_data.set_channels([])
+        self.settings_dialog.deleteLater()
+
 
 def fastParabolicInterp(y1, y2, y3):
     """Estimate sub-bin pitch offset using parabolic interpolation.
@@ -380,7 +402,14 @@ class PitchTracker:
         Returns:
             Optional[float]: Estimated pitch in Hz, or NaN if unvoiced.
         """
-        spectrum = np.abs(np.fft.rfft(frame[0, :] * self.proc.window))
+        # Apply the amplitude threshold to the analyzed row before normalizing.
+        samples = frame[0, :]
+        rms = np.sqrt(np.mean(samples ** 2))
+        dbfs = 20 * np.log10(rms + np.finfo(np.float64).eps)
+        if dbfs < self.min_db or not rms:
+            self.prev_f0 = None
+            return np.nan
+        spectrum = np.abs(np.fft.rfft(samples * self.proc.window))
 
         # Generate the frequency bins (linear) to that correspond with the spectrum data
         freqLin = np.arange(len(spectrum), dtype='float64')
@@ -415,11 +444,6 @@ class PitchTracker:
         # to frequency and applying it to idxMax with the interpolated index offset.
         f0 = np.interp(idxMax + idxShift, np.arange(len(self.logSpacedFreqs)), self.logSpacedFreqs)
 
-        # Get dBFS of the frame.
-        # Only signals above user's min_db threshold will be considered voiced.
-        RMS = np.sqrt(np.mean(frame**2))
-        dBFS = 20 * np.log10(RMS + np.finfo(np.float64).eps)
-
         # Exclude pitch jumps greater than p_delta semitones from the previous pitch
         if self.prev_f0 is not None and f0 != np.nan:
             semitoneDiff = 12 * np.abs(np.log2(f0 / self.prev_f0))
@@ -430,7 +454,7 @@ class PitchTracker:
         pitchConf = pitchStrengths[idxMax] / 2.56
 
         # Bool conditions for unreliable pitch estimate
-        pitchUnreliable = (dBFS < self.min_db) or (pitchConf < self.conf) or (semitoneDiff > self.p_delta)
+        pitchUnreliable = (pitchConf < self.conf) or (semitoneDiff > self.p_delta)
 
         # Return
         if pitchUnreliable:
