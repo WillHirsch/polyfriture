@@ -31,9 +31,6 @@ panels. Channel grids fill bottom-to-top, then left-to-right; the global column
 setting controls plots within each panel. Panels may be added, changed or closed
 independently, with one parameter set per panel shared by its channels.
 
-See the `multichannel verification report <doc/multichannel-verification.rst>`_
-for reproducible load measurements, screenshots, package checks and their limits.
-
 This program can be useful to analyze and equalize the audio response of a hall, or for educational purposes, etc.
 
 Friture was created by Timothée Lecomte and contributors.
