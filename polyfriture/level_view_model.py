@@ -18,57 +18,33 @@
 # You should have received a copy of the GNU General Public License
 # along with Friture.  If not, see <http://www.gnu.org/licenses/>.
 
-from PyQt6 import QtCore
-from PyQt6.QtCore import QObject, pyqtProperty  # type: ignore
+from PyQt6.QtCore import QObject, pyqtProperty
 
 from polyfriture.ballistic_peak import BallisticPeak
 from polyfriture.level_data import LevelData
+from polyfriture.scope_data import Scope_Data
 
-class LevelViewModel(QtCore.QObject):
-    two_channels_changed = QtCore.pyqtSignal(bool)
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
+class LevelViewModel(Scope_Data):
+    """One meter's live, slow-label and peak-hold state; axes belong to the panel."""
 
-        self._two_channels = False
-
+    def __init__(self, parent=None, *, axes=None):
+        super().__init__(parent, axes=axes)
         self._level_data = LevelData(self)
-        self._level_data_2 = LevelData(self)
         self._level_data_slow = LevelData(self)
-        self._level_data_slow_2 = LevelData(self)
         self._level_data_ballistic = BallisticPeak(self)
-        self._level_data_ballistic_2 = BallisticPeak(self)
+        for data in (self._level_data, self._level_data_slow):
+            data.level_rms = -300.
+            data.level_max = -600.
 
-    @pyqtProperty(bool, notify=two_channels_changed) # type: ignore
-    def two_channels(self):
-        return self._two_channels
-
-    @two_channels.setter # type: ignore
-    def two_channels(self, two_channels):
-        if self._two_channels != two_channels:
-            self._two_channels = two_channels
-            self.two_channels_changed.emit(two_channels)
-
-    @pyqtProperty(QObject, constant = True) # type: ignore
+    @pyqtProperty(QObject, constant=True)
     def level_data(self):
         return self._level_data
 
-    @pyqtProperty(QObject, constant = True) # type: ignore
-    def level_data_2(self):
-        return self._level_data_2
-
-    @pyqtProperty(QObject, constant = True) # type: ignore
+    @pyqtProperty(QObject, constant=True)
     def level_data_slow(self):
         return self._level_data_slow
 
-    @pyqtProperty(QObject, constant = True) # type: ignore
-    def level_data_slow_2(self):
-        return self._level_data_slow_2
-
-    @pyqtProperty(QObject, constant = True) # type: ignore
+    @pyqtProperty(QObject, constant=True)
     def level_data_ballistic(self):
         return self._level_data_ballistic
-
-    @pyqtProperty(QObject, constant = True) # type: ignore
-    def level_data_ballistic_2(self):
-        return self._level_data_ballistic_2

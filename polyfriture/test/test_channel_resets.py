@@ -12,7 +12,6 @@ from polyfriture.audiobuffer import AudioBuffer
 from polyfriture.channel_configuration import ChannelConfiguration
 from polyfriture.dock import Dock
 from polyfriture.generator import Generator_Widget
-from polyfriture.level_view_model import LevelViewModel
 from polyfriture.levels import Levels_Widget
 from polyfriture.longlevels import LongLevelWidget
 from polyfriture.octavespectrum import OctaveSpectrum_Widget
@@ -195,22 +194,22 @@ def test_spectrogram_clears_image_clock_and_resampler_while_paused(panel_parent,
 
 
 def test_meter_clears_rms_peak_hold_and_slow_labels(panel_parent, configured_buffer):
-    view_model = LevelViewModel()
-    panel = Levels_Widget(panel_parent, view_model)
+    panel = Levels_Widget(panel_parent)
     attach(panel, configured_buffer)
     panel.handle_new_data(np.ones((2, 1024)))
-    view_model.level_data_slow.level_rms = -1.
-    view_model.level_data_slow_2.level_rms = -2.
-    assert view_model.level_data_ballistic.peak_iec > 0.
+    previous = tuple(panel._channels.values())
+    assert all(state.view.level_data_ballistic.peak_iec > 0. for state in previous)
+    previous[0].view.level_data_slow.level_rms = -1.
 
     replace_channels(configured_buffer)
 
-    assert panel.old_rms == panel.old_rms_2 == panel.old_max == panel.old_max_2 == 1e-30
-    assert view_model.level_data_ballistic.peak_iec == view_model.level_data_ballistic_2.peak_iec == 0.
-    assert view_model.level_data_slow.level_rms == view_model.level_data_slow_2.level_rms == -300.
-    assert view_model.two_channels
+    assert tuple(panel._channels) == (2, 3)
+    for state in panel._channels.values():
+        assert state.old_rms == state.old_max == 1e-30
+        assert state.view.level_data_ballistic.peak_iec == 0.
+        assert state.view.level_data_slow.level_rms == -300.
     configured_buffer.handle_configuration_changed(ChannelConfiguration(0, (0,), 4, 3))
-    assert not view_model.two_channels
+    assert tuple(panel._channels) == (0,)
 
 
 def test_generator_input_reset_leaves_output_alone():

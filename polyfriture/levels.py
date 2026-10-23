@@ -18,161 +18,116 @@
 # You should have received a copy of the GNU General Public License
 # along with Friture.  If not, see <http://www.gnu.org/licenses/>.
 
-"""Level widget that displays peak and RMS levels for 1 or 2 ports."""
+"""Dockable meters with independent DSP and one shared IEC scale."""
 
-from PyQt6.QtCore import QObject
+from dataclasses import dataclass
+
 import numpy as np
+from PyQt6.QtCore import QObject
 
-from polyfriture.levels_settings import Levels_Settings_Dialog  # settings dialog
-from polyfriture.audioproc import audioproc
-from polyfriture.iec import dB_to_IEC
-from polyfriture.signal.exp_smoothing import exp_smoothed_value
 from polyfriture.audiobackend import SAMPLING_RATE
+from polyfriture.iec import IECScale, dB_to_IEC
+from polyfriture.level_view_model import LevelViewModel
+from polyfriture.levels_settings import Levels_Settings_Dialog
+from polyfriture.scope_data import Scope_Data
+from polyfriture.signal.exp_smoothing import exp_smoothed_value
 
 SMOOTH_DISPLAY_TIMER_PERIOD_MS = 25
 LEVEL_TEXT_LABEL_PERIOD_MS = 250
+LEVEL_TEXT_LABEL_STEPS = LEVEL_TEXT_LABEL_PERIOD_MS // SMOOTH_DISPLAY_TIMER_PERIOD_MS
 
-LEVEL_TEXT_LABEL_STEPS = LEVEL_TEXT_LABEL_PERIOD_MS / SMOOTH_DISPLAY_TIMER_PERIOD_MS
+
+@dataclass
+class MeterChannelState:
+    view: LevelViewModel
+    old_rms: float = 1e-30
+    old_max: float = 1e-30
+
 
 class Levels_Widget(QObject):
-
-    def __init__(self, parent, view_model):
+    def __init__(self, parent):
         super().__init__(parent)
-
         self._parent = parent
-        self.level_view_model = view_model
-
         self.audiobuffer = None
-
-        # initialize the settings dialog
+        self._data = Scope_Data(self)
+        self._data.show_legend = False
+        self._data.vertical_axis.name = "Level (dB FS)"
+        self._data.vertical_axis.setScale(IECScale)
+        self._data.vertical_axis.setRange(-70., 0.)
         self.settings_dialog = Levels_Settings_Dialog(parent)
-
-        # initialize the class instance that will do the fft
-        self.proc = audioproc()
-
-        # time = SMOOTH_DISPLAY_TIMER_PERIOD_MS/1000. #DISPLAY
-        # time = 0.025 #IMPULSE setting for a sound level meter
-        # time = 0.125 #FAST setting for a sound level meter
-        # time = 1. #SLOW setting for a sound level meter
-        self.response_time = 0.300  # 300ms is a common value for VU meters
-        # an exponential smoothing filter is a simple IIR filter
-        # s_i = alpha*x_i + (1-alpha)*s_{i-1}
-        # we compute alpha so that the n most recent samples represent 100*w percent of the output
+        self._channels = {}
+        # Preserve the existing 300 ms RMS response and 25 ms peak response.
+        self.response_time = 0.300
         w = 0.65
         n = self.response_time * SAMPLING_RATE
-        N = 5*n
         self.alpha = 1. - (1. - w) ** (1. / (n + 1))
-        self.kernel = (1. - self.alpha) ** (np.arange(0, N)[::-1])
-        # first channel
-        self.old_rms = 1e-30
-        self.old_max = 1e-30
-        # second channel
-        self.old_rms_2 = 1e-30
-        self.old_max_2 = 1e-30
-
-        response_time_peaks = 0.025  # 25ms for instantaneous peaks
-        n2 = response_time_peaks / (SMOOTH_DISPLAY_TIMER_PERIOD_MS / 1000.)
+        self.kernel = (1. - self.alpha) ** np.arange(0, 5 * n)[::-1]
+        n2 = 0.025 / (SMOOTH_DISPLAY_TIMER_PERIOD_MS / 1000.)
         self.alpha2 = 1. - (1. - w) ** (1. / (n2 + 1))
-
-        self.two_channels = False
-
         self.i = 0
 
-    # method
+    def qml_file_name(self):
+        return "Levels.qml"
+
+    def view_model(self):
+        return self._data
+
     def set_buffer(self, buffer):
         self.audiobuffer = buffer
+        self.reset_channel_state(buffer.channel_configuration)
 
     def reset_channel_state(self, configuration):
-        self.old_rms = self.old_max = 1e-30
-        self.old_rms_2 = self.old_max_2 = 1e-30
+        previous = self._channels
+        self._channels = {}
+        if configuration is not None:
+            for channel_id, label in zip(configuration.channel_ids, configuration.channel_labels):
+                view = LevelViewModel(self, axes=self._data)
+                view.label = label
+                self._channels[channel_id] = MeterChannelState(view)
+        self._data.set_channels([state.view for state in self._channels.values()])
+        for state in previous.values():
+            state.view.deleteLater()
         self.i = 0
-        self.two_channels = configuration is not None and len(configuration.channel_ids) > 1
-        self.level_view_model.two_channels = self.two_channels
-        for level_data in (
-            self.level_view_model.level_data,
-            self.level_view_model.level_data_2,
-            self.level_view_model.level_data_slow,
-            self.level_view_model.level_data_slow_2,
-        ):
-            level_data.level_rms = -300.
-            level_data.level_max = -600.
-        self.level_view_model.level_data_ballistic.reset()
-        self.level_view_model.level_data_ballistic_2.reset()
 
     def handle_new_data(self, floatdata):
-        if floatdata.shape[0] > 1 and not self.two_channels:
-            self.two_channels = True
-            self.level_view_model.two_channels = True
-        elif floatdata.shape[0] == 1 and self.two_channels:
-            self.two_channels = False
-            self.level_view_model.two_channels = False
+        for samples, state in zip(floatdata, self._channels.values()):
+            if not samples.size:
+                continue
+            value_max = np.abs(samples).max()
+            state.old_max = max(value_max, state.old_max * (1. - self.alpha2))
+            state.old_rms = exp_smoothed_value(self.kernel, self.alpha, samples ** 2, state.old_rms)
+            data = state.view.level_data
+            with np.errstate(divide="ignore"):
+                data.level_rms = 10. * np.log10(state.old_rms)
+                data.level_max = 20. * np.log10(state.old_max)
+            state.view.level_data_ballistic.peak_iec = dB_to_IEC(max(data.level_max, data.level_rms))
 
-        # first channel
-        y1 = floatdata[0, :]
-
-        # exponential smoothing for max
-        if len(y1) > 0:
-            value_max = np.abs(y1).max()
-            if value_max > self.old_max * (1. - self.alpha2):
-                self.old_max = value_max
-            else:
-                # exponential decrease
-                self.old_max *= (1. - self.alpha2)
-
-        # exponential smoothing for RMS
-        value_rms = exp_smoothed_value(self.kernel, self.alpha, y1 ** 2, self.old_rms)
-        self.old_rms = value_rms
-
-        self.level_view_model.level_data.level_rms = 10. * np.log10(value_rms + 0. * 1e-80)
-        self.level_view_model.level_data.level_max = 20. * np.log10(self.old_max + 0. * 1e-80)
-        self.level_view_model.level_data_ballistic.peak_iec = dB_to_IEC(max(self.level_view_model.level_data.level_max, self.level_view_model.level_data.level_rms))
-
-        if self.two_channels:
-            # second channel
-            y2 = floatdata[1, :]
-
-            # exponential smoothing for max
-            if len(y2) > 0:
-                value_max = np.abs(y2).max()
-                if value_max > self.old_max_2 * (1. - self.alpha2):
-                    self.old_max_2 = value_max
-                else:
-                    # exponential decrease
-                    self.old_max_2 *= (1. - self.alpha2)
-
-            # exponential smoothing for RMS
-            value_rms = exp_smoothed_value(self.kernel, self.alpha, y2 ** 2, self.old_rms_2)
-            self.old_rms_2 = value_rms
-
-            self.level_view_model.level_data_2.level_rms = 10. * np.log10(value_rms + 0. * 1e-80)
-            self.level_view_model.level_data_2.level_max = 20. * np.log10(self.old_max_2 + 0. * 1e-80)
-            self.level_view_model.level_data_ballistic_2.peak_iec = dB_to_IEC(max(self.level_view_model.level_data_2.level_max, self.level_view_model.level_data_2.level_rms))
-
-    # method
     def canvasUpdate(self):
         if not self._parent.isVisible():
             return
-
         self.i += 1
-
         if self.i == LEVEL_TEXT_LABEL_STEPS:
-            self.level_view_model.level_data_slow.level_rms = self.level_view_model.level_data.level_rms
-            self.level_view_model.level_data_slow.level_max = self.level_view_model.level_data.level_max
+            for state in self._channels.values():
+                state.view.level_data_slow.level_rms = state.view.level_data.level_rms
+                state.view.level_data_slow.level_max = state.view.level_data.level_max
+        self.i %= LEVEL_TEXT_LABEL_STEPS
 
-            if self.two_channels:
-                self.level_view_model.level_data_slow_2.level_rms = self.level_view_model.level_data_2.level_rms
-                self.level_view_model.level_data_slow_2.level_max = self.level_view_model.level_data_2.level_max
+    def pause(self):
+        pass
 
-        self.i = self.i % LEVEL_TEXT_LABEL_STEPS
+    def restart(self):
+        pass
 
-    # slot
     def settings_called(self, checked):
         self.settings_dialog.show()
 
-    # method
     def saveState(self, settings):
         self.settings_dialog.saveState(settings)
 
-    # method
     def restoreState(self, settings):
         self.settings_dialog.restoreState(settings)
+
+    def cleanup(self):
+        self.reset_channel_state(None)
+        self.settings_dialog.close()
+        self.settings_dialog.deleteLater()

@@ -66,6 +66,7 @@ Available widgets (see `widgetdict.py`):
 | 5         | `Generator_Widget` | `Generator.qml` | Signal generator        |
 | 7         | `LongLevelWidget`  | —               | Long-time level meters  |
 | 8         | `PitchTrackerWidget` | `PitchView.qml` | Pitch tracking         |
+| 9         | `Levels_Widget` | `Levels.qml` | Channel peak/RMS meters |
 
 ### Signal Processing
 

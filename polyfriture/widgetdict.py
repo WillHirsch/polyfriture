@@ -25,6 +25,7 @@ from polyfriture.scope import Scope_Widget
 from polyfriture.generator import Generator_Widget
 from polyfriture.longlevels import LongLevelWidget
 from polyfriture.pitch_tracker import PitchTrackerWidget
+from polyfriture.levels import Levels_Widget
 
 widgets = [
     {'Id': 1, "Class": Scope_Widget, "Name": "Scope"},
@@ -34,6 +35,7 @@ widgets = [
     {'Id': 5, "Class": Generator_Widget, "Name": "Generator"},
     {'Id': 7, "Class": LongLevelWidget, "Name": "Long-time levels"},
     {'Id': 8, "Class": PitchTrackerWidget, "Name": "Pitch Tracker"},
+    {'Id': 9, "Class": Levels_Widget, "Name": "Level meters"},
 ]
 
 

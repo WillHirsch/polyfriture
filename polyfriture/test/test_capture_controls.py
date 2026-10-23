@@ -72,12 +72,18 @@ def test_window_starts_and_capture_toggles_without_playback(app, profile, fritur
     profile.setValue("AudioBackend/showPlayback", 2)
     profile.setValue("AudioBackend/historyLength", 600)
     initialize_settings(profile, friture_source)
+    # Exercise capture with a deliberately empty current layout, as if its
+    # ordinary meter panel had been closed. Meter docking is covered separately.
+    profile.setValue("Docks/dockNames", [])
 
     window = analyzer.Friture()
     try:
         assert window.main_tile_layout is not None
         assert window.display_timer.isActive()
         assert window._main_window_view_model.toolbar_view_model.recording
+        assert not hasattr(window, "level_widget")
+        assert not hasattr(window._main_window_view_model, "level_view_model")
+        assert window.dockmanager.docks == []
         assert not hasattr(window, "player")
         assert not hasattr(window, "playback_widget")
         assert not hasattr(window.settings_dialog, "playbackGroup")
@@ -97,7 +103,11 @@ def test_window_starts_and_capture_toggles_without_playback(app, profile, fritur
         window.display_timer.stop()
         window.slow_timer.stop()
         window.close()
+        engine = window.qml_engine
         sip.delete(window)
+        # The application parents this engine to the process Store. Explicitly
+        # dispose it here before subsequent tests create their own QML engines.
+        sip.delete(engine)
 
     assert not profile.contains("AudioBackend/showPlayback")
     assert not profile.contains("AudioBackend/historyLength")

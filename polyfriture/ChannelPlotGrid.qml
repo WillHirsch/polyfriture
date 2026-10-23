@@ -16,6 +16,8 @@ Rectangle {
     required property Component plotDelegate
     // Publish labels and rendering models together, in capture-row order.
     property var channels: []
+    property bool showHorizontalAxis: true
+    property bool showPlotArea: true
     property int configuredColumns: Store.channel_grid_columns
     property real headerHeight: fontMetrics.height + 4
     property real columnSpacing: 8
@@ -54,7 +56,7 @@ Rectangle {
             width = Math.max(width, fontMetrics.boundingRect(ticks[i].value).width);
         return width;
     }
-    readonly property real endpointMargin: maximumLabelWidth(scopedata.horizontal_axis.scale_division.logicalMajorTicks) / 2
+    readonly property real endpointMargin: showHorizontalAxis ? maximumLabelWidth(scopedata.horizontal_axis.scale_division.logicalMajorTicks) / 2 : 0
     readonly property real leftGutter: Math.min(Math.max(0, width),
         Math.max(endpointMargin, fontMetrics.height + 4 + yMeasure.implicitWidth))
     readonly property real desiredRightGutter: hasColorAxis
@@ -63,7 +65,7 @@ Rectangle {
     readonly property real rightGutter: Math.min(Math.max(0, width - leftGutter), desiredRightGutter)
     readonly property real topGutter: Math.min(Math.max(0, height), yMeasure.topOverflow)
     readonly property real bottomGutter: Math.min(Math.max(0, height - topGutter),
-        Math.max(yMeasure.topOverflow, xMeasure.implicitHeight + fontMetrics.height + 4))
+        Math.max(yMeasure.topOverflow, showHorizontalAxis ? xMeasure.implicitHeight + fontMetrics.height + 4 : 0))
     readonly property real innerWidth: Math.max(0, width - leftGutter - rightGutter)
     readonly property real innerHeight: Math.max(0, height - topGutter - bottomGutter)
     readonly property real effectiveColumnSpacing: columnCount > 1
@@ -115,6 +117,7 @@ Rectangle {
                 clip: true
                 horizontal_axis: grid.scopedata.horizontal_axis
                 vertical_axis: grid.scopedata.vertical_axis
+                decorationsVisible: grid.showPlotArea
                 Loader {
                     anchors.fill: parent
                     active: width > 0 && height > 0
@@ -160,7 +163,7 @@ Rectangle {
         }
     }
     Repeater {
-        model: grid.columnCount
+        model: grid.showHorizontalAxis ? grid.columnCount : 0
         delegate: HorizontalScale {
             required property int index
             objectName: "channel-grid-x-scale-" + index
@@ -172,7 +175,7 @@ Rectangle {
         }
     }
     Repeater {
-        model: grid.columnCount
+        model: grid.showHorizontalAxis ? grid.columnCount : 0
         delegate: Text {
             required property int index
             x: grid.leftGutter + index * (grid.dataWidth + grid.effectiveColumnSpacing)

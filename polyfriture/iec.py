@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # Copyright (C) 2021 Timothée Lecomte
+# Copyright (C) 2026 Will Hirsch
 
 # This file is part of Friture.
 #
@@ -32,3 +33,23 @@ def dB_to_IEC(dB):
         return (dB + 30.0) * 0.02 + 0.3
     else:  # if dB < 0.0
         return (dB + 20.0) * 0.025 + 0.5
+
+class IECScale:
+    """The meter's piecewise IEC mapping, exposed through the ordinary axis API."""
+    NAME = "IEC"
+
+    @staticmethod
+    def transform(value):
+        import numpy as np
+        return np.vectorize(dB_to_IEC, otypes=[float])(value)
+
+    @staticmethod
+    def inverse(value):
+        import numpy as np
+        return np.interp(value, [0., .025, .075, .15, .3, .5, 1.],
+                         [-70., -60., -50., -40., -30., -20., 0.])
+
+    @staticmethod
+    def ticks(scale_min, scale_max):
+        return [v for v in (-60., -50., -40., -30., -20., -10., -6., -3., 0.)
+                if min(scale_min, scale_max) <= v <= max(scale_min, scale_max)], []
