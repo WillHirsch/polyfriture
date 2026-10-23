@@ -1,0 +1,109 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: source-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  pytest:
+    name: Tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022, macos-15]
+        python: ['3.11', '3.14']
+    env:
+      UV_PYTHON: ${{ matrix.python }}
+      QT_QPA_PLATFORM: offscreen
+      QT_QUICK_CONTROLS_STYLE: Basic
+      QT_QUICK_BACKEND: software
+      PYTHONFAULTHANDLER: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: '0.10.5'
+          enable-cache: 'auto'
+
+      - name: Install Linux runtime libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libportaudio2 libegl1 libgl1 libxkbcommon-x11-0 libxcb-cursor0
+
+      - name: Install locked dependencies
+        run: uv sync --frozen --dev
+
+      - name: Record runtime versions
+        run: |
+          mkdir -p test-results
+          uv --version | tee test-results/environment.log
+          uv run --frozen python - <<'PY' 2>&1 | tee -a test-results/environment.log
+          import platform
+          import sys
+
+          import numpy
+          import pytest
+          import sounddevice
+          from PyQt6.QtCore import PYQT_VERSION_STR, QT_VERSION_STR, qVersion
+
+          print(platform.platform())
+          print(sys.version)
+          print(f"pytest {pytest.__version__}; NumPy {numpy.__version__}; PyQt {PYQT_VERSION_STR}")
+          print(f"Qt runtime {qVersion()}; PyQt compiled against Qt {QT_VERSION_STR}")
+          print(f"PortAudio {sounddevice.get_portaudio_version()}")
+          PY
+
+      - name: Run the complete source test suite
+        run: uv run --frozen pytest -ra --junitxml=test-results/junit.xml 2>&1 | tee test-results/pytest.log
+
+      - name: Upload test results
+        id: upload_results
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: source-tests-${{ matrix.os }}-python-${{ matrix.python }}
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Report unavailable test artifacts
+        if: always() && steps.upload_results.outcome == 'failure'
+        run: echo "::warning::Test result artifact upload failed; see the upload step for details."
+
+  source-tests:
+    name: Source tests
+    if: always()
+    needs: pytest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every test job to pass
+        env:
+          TEST_RESULT: ${{ needs.pytest.result }}
+        run: test "$TEST_RESULT" = success

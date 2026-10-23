@@ -81,6 +81,16 @@ uv sync
 uv run polyfriture
 ```
 
+## Running the tests
+
+```sh
+uv sync --frozen --dev
+uv run --frozen pytest -ra
+```
+
+See [TESTING.md](TESTING.md) for platform dependencies, headless Qt setup,
+the CI matrix, settings isolation, and the source-test/release gating policy.
+
 ## Dependencies
 
 See [pyproject.toml](pyproject.toml)
