@@ -132,23 +132,28 @@ def test_long_levels_clears_filter_and_history(panel_parent, configured_buffer):
 def test_pitch_clears_estimates_continuity_and_display(panel_parent, configured_buffer):
     panel = PitchTrackerWidget(panel_parent)
     attach(panel, configured_buffer)
-    panel.tracker.prev_f0 = 440.
-    panel.tracker.out_buf.push(np.array([[440., 441.]]), 1.)
-    panel.tracker.out_offset = 2
-    panel._pitch_tracker_data.pitch = 441.
-    panel.tracker.conf = 0.75
-    panel.update_curve()
+    panel.set_conf(0.75)
+    previous = tuple(panel._channels.values())
+    for channel in previous:
+        channel.tracker.prev_f0 = 440.
+        channel.tracker.out_buf.push(np.array([[440., 441.]]), 1.)
+        channel.tracker.out_offset = 2
+        channel.pitch = 441.
+        panel.update_curve(channel)
 
     replace_channels(configured_buffer)
 
-    assert panel.tracker.next_in_offset == 0
-    assert panel.tracker.prev_f0 is None
-    assert panel.tracker.out_buf.offset == panel.tracker.out_offset == 0
-    assert panel._curve.y_array().size == 0
-    assert panel._pitch_tracker_data.pitch == "--"
-    assert panel.tracker.conf == 0.75
-    configured_buffer.ringbuffer.push(np.zeros((2, panel.tracker.fft_size)), 2.)
-    assert len(list(panel.tracker.new_frames())) == 1
+    assert tuple(panel._channels) == (2, 3)
+    for channel in panel._channels.values():
+        assert channel.tracker.next_in_offset == 0
+        assert channel.tracker.prev_f0 is None
+        assert channel.tracker.out_buf.offset == channel.tracker.out_offset == 0
+        assert channel.curve.y_array().size == 0
+        assert channel.pitch == "--"
+        assert channel.tracker.conf == 0.75
+    configured_buffer.handle_new_data(np.zeros((2, 4096)), 2., None, 2)
+    panel.handle_new_data(np.zeros((2, 4096)))
+    assert all(channel.tracker.out_offset == 1 for channel in panel._channels.values())
 
 
 def test_spectrogram_clears_image_clock_and_resampler_while_paused(panel_parent, configured_buffer):
