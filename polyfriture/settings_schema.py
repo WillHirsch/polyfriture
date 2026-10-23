@@ -180,7 +180,50 @@ def _upgrade_to_v3(values: dict[str, Any]) -> None:
     values[f"Docks/{name}/type"] = 9
 
 
-UPGRADES = (_upgrade_to_v1, _upgrade_to_v2, _upgrade_to_v3)
+def _v3_duo_input(value: Any) -> bool:
+    # Freeze the former input-mode parser. Invalid modes restore as single input;
+    # the owner's channel validator, rather than this historical transform,
+    # decides whether the accompanying channel values can be used.
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return value == -3
+    if isinstance(value, str) and re.fullmatch(r"[+-]?\d+", value):
+        try:
+            return int(value) == -3
+        except ValueError:
+            pass
+    return False
+
+
+def _upgrade_to_v4(values: dict[str, Any]) -> None:
+    """Replace the former single/dual selector and decorated device identity."""
+    prefix = "AudioBackend/"
+    channels_key = prefix + "selectedChannels"
+    if channels_key not in values:
+        channels = [values.get(prefix + "firstChannel", 0)]
+        if _v3_duo_input(values.get(prefix + "duoInput")):
+            channels.append(values.get(prefix + "secondChannel", 0))
+        values[channels_key] = channels
+    for name in ("firstChannel", "secondChannel", "duoInput"):
+        values.pop(prefix + name, None)
+
+    device_key = prefix + "deviceName"
+    device_name = values.get(device_key)
+    if isinstance(device_name, str) and prefix + "deviceHostApi" not in values:
+        # Previously produced by "%s (%d channels) (%s) %s", with the final
+        # component either empty or " (default)". Require that exact shape so
+        # ordinary raw device names containing parentheses stay intact. A host
+        # API name containing parentheses is ambiguous and intentionally kept.
+        # An explicit host API already identifies the new pair: the raw name
+        # itself can end in this same pattern, so never reinterpret it twice.
+        match = re.fullmatch(r"(.+) \([0-9]+ channels\) \(([^()]+)\) (?: \(default\))?", device_name)
+        if match:
+            values[device_key] = match[1]
+            values[prefix + "deviceHostApi"] = match[2]
+
+
+UPGRADES = (_upgrade_to_v1, _upgrade_to_v2, _upgrade_to_v3, _upgrade_to_v4)
 CURRENT_VERSION = len(UPGRADES)
 
 

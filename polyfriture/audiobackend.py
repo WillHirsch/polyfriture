@@ -79,7 +79,6 @@ class __AudioBackend(QtCore.QObject):
 
         self.logger = logging.getLogger(__name__)
 
-        self.duo_input = False
         self.channel_configuration = None
         self.running = True
 
@@ -92,8 +91,6 @@ class __AudioBackend(QtCore.QObject):
         self.logger.info(f"Found {len(self.input_devices)} input devices and {len(self.output_devices)} output devices")
 
         self.device = None
-        self.first_channel = None
-        self.second_channel = None
 
         self.stream = None
         self.ringBuffer = None
@@ -137,8 +134,6 @@ class __AudioBackend(QtCore.QObject):
 
     # method
     def get_readable_devices_list(self):
-        input_devices = self.get_input_devices()
-
         raw_devices = sounddevice.query_devices()
 
         try:
@@ -149,7 +144,7 @@ class __AudioBackend(QtCore.QObject):
             default_input_device = None
 
         devices_list = []
-        for device in input_devices:
+        for device in self.input_devices:
             api = sounddevice.query_hostapis(device['hostapi'])['name']
 
             if default_input_device is not None and device['index'] == default_input_device['index']:
@@ -164,6 +159,18 @@ class __AudioBackend(QtCore.QObject):
             devices_list += [desc]
 
         return devices_list
+
+    def get_input_device_identities(self):
+        """Device names and host APIs in the same order as the device selector.
+
+        Unlike the display labels, these identities do not contain the current
+        default marker, channel count, or enumeration index.
+        """
+        return [(device['name'], sounddevice.query_hostapis(device['hostapi'])['name'])
+                for device in self.input_devices]
+
+    def get_input_device_channel_count(self, index):
+        return self.input_devices[index]['max_input_channels']
 
     # method
     def get_readable_output_devices_list(self):
@@ -247,7 +254,7 @@ class __AudioBackend(QtCore.QObject):
             if device['max_input_channels'] > 0:
                 device['index'] = devices.index(device)
                 # default input device has already been inserted
-                if default_input_device is not None and device['index'] != default_input_device['index']:
+                if default_input_device is None or device['index'] != default_input_device['index']:
                     input_devices += [device]
 
         return input_devices
@@ -285,27 +292,36 @@ class __AudioBackend(QtCore.QObject):
     # method.
     # The index parameter is the index in the self.input_devices list of devices !
     # The return parameter is also an index in the same list.
-    def select_input_device(self, index):
+    def select_input_device(self, index, channel_ids=None):
         current_index = self.get_readable_current_device()
         if isinstance(index, bool) or not isinstance(index, (int, np.integer)) or not 0 <= index < len(self.input_devices):
             return False, current_index
         device = self.input_devices[index]
         if device is self.device and self.stream is not None:
+            if channel_ids is not None:
+                try:
+                    self.select_channels(channel_ids)
+                except ValueError:
+                    return False, current_index
             return True, current_index
 
-        # Prepare the candidate without mutating the active configuration. A
-        # failed open/start must leave the old stream and analysis usable.
+        # Prepare the complete device/channel transaction before mutating the
+        # active configuration. Invalid requests and failed open/start leave
+        # both the previous stream and its queued samples usable.
         candidate = None
         try:
+            generation = 1 if self.channel_configuration is None else self.channel_configuration.generation + 1
+            channels = (0,) if channel_ids is None else channel_ids
+            configuration = ChannelConfiguration(device['index'], channels,
+                                                   device['max_input_channels'], generation)
             candidate, ringbuffer, action, channel_count = self.open_stream(device)
+            configuration = ChannelConfiguration(device['index'], configuration.channel_ids,
+                                                   channel_count, generation)
             if self.running:
                 candidate.start()
             start_time = candidate.time
-            generation = 1 if self.channel_configuration is None else self.channel_configuration.generation + 1
-            channels = (0, min(1, channel_count - 1)) if self.duo_input else (0,)
-            configuration = ChannelConfiguration(device['index'], channels, channel_count, generation)
         except Exception:
-            self.logger.exception("Failed to open input device")
+            self.logger.exception("Failed to select input device and channels")
             if candidate is not None:
                 self._retire_stream(candidate)
             return False, current_index
@@ -313,7 +329,6 @@ class __AudioBackend(QtCore.QObject):
         previous_stream = self.stream
         self.stream, self.ringBuffer, self.action = candidate, ringbuffer, action
         self.device, self.nchannels_max = device, channel_count
-        self.first_channel, self.second_channel = 0, min(1, channel_count - 1)
         self.stream_start_time, self.stream_read_index = start_time, 0
         self.xruns = action.stats.input_overflows
         self._publish_configuration(configuration)
@@ -341,31 +356,6 @@ class __AudioBackend(QtCore.QObject):
             return current
         self._publish_configuration(configuration)
         return configuration
-
-    def _select_legacy_channels(self):
-        if self.device is not None:
-            channels = (self.first_channel, self.second_channel) if self.duo_input else (self.first_channel,)
-            self.select_channels(channels)
-
-    def _valid_channel(self, channel):
-        return (not isinstance(channel, bool) and isinstance(channel, (int, np.integer))
-                and 0 <= channel < self.nchannels_max)
-
-    # method
-    def select_first_channel(self, index):
-        if not self._valid_channel(index):
-            return False, self.first_channel
-        self.first_channel = index
-        self._select_legacy_channels()
-        return True, self.first_channel
-
-    # method
-    def select_second_channel(self, index):
-        if not self._valid_channel(index):
-            return False, self.second_channel
-        self.second_channel = index
-        self._select_legacy_channels()
-        return True, self.second_channel
 
     # method
     def open_stream(self, device):
@@ -452,14 +442,6 @@ class __AudioBackend(QtCore.QObject):
         return [f"Channel {channel + 1}" for channel in range(self.nchannels_max)]
 
     # method
-    def get_current_first_channel(self):
-        return self.first_channel
-
-    # method
-    def get_current_second_channel(self):
-        return self.second_channel
-
-    # method
     def get_current_device_nchannels(self):
         return self.nchannels_max
 
@@ -517,14 +499,6 @@ class __AudioBackend(QtCore.QObject):
             # A direct signal handler can reconfigure capture during delivery.
             if ringbuffer is not self.ringBuffer or configuration is not self.channel_configuration or not self.running:
                 break
-
-    def set_single_input(self):
-        self.duo_input = False
-        self._select_legacy_channels()
-
-    def set_duo_input(self):
-        self.duo_input = True
-        self._select_legacy_channels()
 
     def get_stream_time(self) -> float:
         """The current stream time in seconds.

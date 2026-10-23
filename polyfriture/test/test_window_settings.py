@@ -29,7 +29,7 @@ def test_historical_conversion_leaves_malformed_layout_for_normal_recovery(setti
     before = {key: settings.value(key) for key in settings.allKeys()}
     values = dict(before)
     apply_upgrades(values, 0)
-    assert values == before
+    assert values == {**before, "AudioBackend/selectedChannels": [0]}
     assert {key: settings.value(key) for key in settings.allKeys()} == before
 
 

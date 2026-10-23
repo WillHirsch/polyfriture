@@ -10,6 +10,18 @@ Its goal is to more effectively support monitoring multiple channels from one au
 
 Polyfriture displays audio data in several widgets, such as a scope, a spectrum analyzer, or a rolling 2D spectrogram.
 
+The application settings select one input device and any nonempty set of its
+checked channels. Channels appear in physical order with one-based names; scopes
+trigger from the first selected channel. Each panel uses the same parameters for
+all its channels, while Generator remains an output utility.
+
+Unavailable saved devices and channels retain their preferences for a later start.
+The settings dialog shows the active fallback and explains any missing selection;
+an explicit device or channel choice replaces the saved preference. Device matching
+uses its name and host API, so changes to device order or the system default do not
+redirect a saved selection. If that identity matches multiple devices, select one
+explicitly rather than relying on an ambiguous match.
+
 Spectrogram settings offer a clockwise 90-degree rotation, with frequency increasing
 rightward and newest audio at the bottom. The channel grid is transposed while
 labels remain upright; the global grid column count becomes the rotated row count.
