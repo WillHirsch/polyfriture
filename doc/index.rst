@@ -18,6 +18,8 @@ tasks.
 .. toctree::
    :maxdepth: 2
 
+   multichannel-verification
+
 Identify a feedback frequency (Larsen effect)
 ---------------------------------------------
 

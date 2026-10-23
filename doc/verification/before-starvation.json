@@ -1,0 +1,36 @@
+{
+  "capture": "synthetic wall-clock 48000 Hz; no physical driver",
+  "capture_ring_capacity_frames": 131072,
+  "case": {
+    "channels": 5,
+    "columns": 3,
+    "height": 1080,
+    "name": "partial",
+    "rotated": false,
+    "scale": 1.0,
+    "width": 1920
+  },
+  "device_pixel_ratio": 1.0,
+  "duration_requested_seconds": 2.0,
+  "font_family": "Segoe UI",
+  "logical_cpus": 14,
+  "machine": "AMD64",
+  "numpy": "2.4.6",
+  "phase": "starting capture",
+  "platform": "Windows-10-10.0.26300-SP0",
+  "processor": "Intel64 Family 6 Model 170 Stepping 4, GenuineIntel",
+  "pyqt": "6.11.0",
+  "python": "3.11.1 (main, Jan 16 2023, 20:56:10) [MSC v.1929 64 bit (AMD64)]",
+  "qt": "6.11.0",
+  "qt_platform": "offscreen",
+  "renderer": "software",
+  "returncode": null,
+  "status": "watchdog_timeout",
+  "subprocess_wall_seconds": 25.06658320000861,
+  "timed_out": true,
+  "warmup_requested_seconds": 0.5,
+  "window_logical_pixels": [
+    1920,
+    1080
+  ]
+}

@@ -11,15 +11,8 @@ RowLayout {
 
     ComboBox {
         id: widgetSelector
-        model: [
-            "Scope",
-            "FFT Spectrum",
-            "2D Spectrogram",
-            "Octave Spectrum",
-            "Generator",
-            "Long-time levels",
-            "Pitch Tracker"
-        ]
+        objectName: "widgetSelector"
+        model: viewModel.widgetNames
         currentIndex: viewModel.currentIndex
         onCurrentIndexChanged: viewModel.currentIndex = currentIndex
         ToolTip.text: "Select the type of audio widget"

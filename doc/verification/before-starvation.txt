@@ -1,0 +1,15 @@
+Ringbuffer lagging behind: ringbuffer time = 466807.052181, stream time = 466808.243304
+Ringbuffer lagging behind: ringbuffer time = 466808.225514, stream time = 466813.244800
+Timeout (0:00:20)!
+Thread 0x00008cc0 (most recent call first):
+  File "C:\Users\will\repos\friture-monitor\tools\multichannel-release-verification\polyfriture\signal\lfilter.py", line 137 in lfilter_float64_1D
+  File "C:\Users\will\repos\friture-monitor\tools\multichannel-release-verification\polyfriture\signal\decimate.py", line 40 in decimate
+  File "C:\Users\will\repos\friture-monitor\tools\multichannel-release-verification\polyfriture\longlevels.py", line 84 in push
+  File "C:\Users\will\repos\friture-monitor\tools\multichannel-release-verification\polyfriture\longlevels.py", line 109 in process
+  File "C:\Users\will\repos\friture-monitor\tools\multichannel-release-verification\polyfriture\longlevels.py", line 172 in handle_new_data
+  File "C:\Users\will\repos\friture-monitor\tools\multichannel-release-verification\polyfriture\audiobuffer.py", line 81 in handle_new_data
+  File "C:\Users\will\repos\friture-monitor\tools\multichannel-release-verification\polyfriture\audiobackend.py", line 496 in fetchAudioData
+  File "C:\Users\will\repos\friture-monitor\tools\multichannel-release-verification\scripts\verify_multichannel.py", line 337 in child
+  File "C:\Users\will\repos\friture-monitor\tools\multichannel-release-verification\scripts\verify_multichannel.py", line 394 in main
+  File "C:\Users\will\repos\friture-monitor\tools\multichannel-release-verification\scripts\verify_multichannel.py", line 448 in <module>
+Ringbuffer lagging behind: ringbuffer time = 466809.441514, stream time = 466818.459150

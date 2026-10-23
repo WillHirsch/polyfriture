@@ -108,3 +108,19 @@ tests fundamental detection with a stronger second harmonic and a stated
 10-cent tolerance, and tests frame/history bookkeeping with deterministic pitch
 estimates. Production DSP behavior is unchanged. After repair, the same full
 suite passes without known-failure exceptions.
+
+## Multichannel integration and load measurements
+
+[The final multichannel audit](doc/multichannel-verification.rst) records the
+reconfiguration and dock-lifetime checks, mono-reference coverage, package
+identity audit, screenshots and measured CPU, memory, responsiveness and
+synthetic capture overflows. Its measurement command is opt-in and uses only
+temporary INI profiles and synthetic capture:
+
+```sh
+uv run --frozen python scripts/verify_multichannel.py --help
+uv run --frozen python scripts/verify_multichannel.py --duration 5 --warmup 1 --output tools/verification
+```
+
+The measurements are observations of particular configurations and rendering
+backends, not CI performance thresholds or a supported operating envelope.

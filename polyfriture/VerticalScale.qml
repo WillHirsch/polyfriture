@@ -103,7 +103,7 @@ Item {
 
         Item {
             y: (1. - modelData.logicalValue) * yscaleColumn.height
-            anchors.right: parent.right
+            anchors.right: yscaleColumn.right
         
             Shape {
                 anchors.right: parent.right

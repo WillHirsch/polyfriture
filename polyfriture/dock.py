@@ -85,7 +85,7 @@ class Dock(QObject):
 
         context = self.qml_engine.rootContext()
         self.dock_qml = dock_component.createWithInitialProperties({}, context) # type: ignore
-        self.dock_qml.setParent(self.qml_engine) # type: ignore
+        self.dock_qml.setParent(self) # type: ignore
         self.dock_qml.setParentItem(self.parent().main_tile_layout) # type: ignore
         
         initialProperties = {"viewModel": self.controlbar_viewmodel}
@@ -94,10 +94,10 @@ class Dock(QObject):
 
         component_raise_if_error(component)
 
-        controlbar_context = QQmlContext(self.qml_engine.rootContext(), self.qml_engine)
+        controlbar_context = QQmlContext(self.qml_engine.rootContext(), self.dock_qml)
         controlbar_context.setContextProperty("viewModel", self.controlbar_viewmodel)
         control_bar_qml = component.createWithInitialProperties({}, controlbar_context) # type: ignore
-        control_bar_qml.setParent(self.qml_engine) # type: ignore
+        control_bar_qml.setParent(self.dock_qml) # type: ignore
 
         control_bar_container = self.dock_qml.findChild(QObject, "control_bar_container") # type: ignore
         assert control_bar_container is not None, "Control bar container not found in Dock.qml"
@@ -135,6 +135,8 @@ class Dock(QObject):
                 self.audiowidget.cleanup()
             self.audiowidget.deleteLater()
             self.audiowidget = None
+
+        self.deleteLater()
 
     def disconnect_audio_widget(self):
         if self.audiowidget is not None:
@@ -210,7 +212,8 @@ class Dock(QObject):
         qml_context.setContextProperty("viewModel", self.audiowidget.view_model()) # type: ignore
         qml_context.setContextProperty("fixedFont", fixed_font)
         self.audio_widget_qml = component.createWithInitialProperties({}, qml_context) # type: ignore
-        self.audio_widget_qml.setParent(self.qml_engine) # type: ignore
+        self.audio_widget_qml.setParent(self.dock_qml) # type: ignore
+        qml_context.setParent(self.audio_widget_qml)
         self.audio_widget_qml.setParentItem(self.audio_widget_container) # type: ignore
         self.audio_widget_qml.setProperty("anchors.fill", self.audio_widget_container) # type: ignore
 
