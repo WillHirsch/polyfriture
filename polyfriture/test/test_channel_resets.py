@@ -49,16 +49,16 @@ def attach(panel, buffer):
 def test_scope_clears_curves_on_same_count_replacement(panel_parent, configured_buffer):
     panel = Scope_Widget(panel_parent)
     attach(panel, configured_buffer)
-    panel.set_timerange(500.)
+    panel.set_timerange(600.)
     configured_buffer.ringbuffer.push(np.ones((2, 32)), 1.)
     panel.handle_new_data(np.ones((2, 32)))
-    assert panel._curve.y_array().size
-    assert panel._curve_2.y_array().size
+    assert all(curve.y_array().size for curve in panel._curves.values())
 
     replace_channels(configured_buffer)
 
-    assert panel._curve.x_array().size == panel._curve_2.x_array().size == 0
-    assert panel.timerange == 500.
+    assert tuple(panel._curves) == (2, 3)
+    assert all(curve.x_array().size == 0 for curve in panel._curves.values())
+    assert panel.timerange == 600.
 
 
 def test_spectrum_clears_smoothing_peaks_and_labels_while_paused(panel_parent, configured_buffer):

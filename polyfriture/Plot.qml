@@ -57,6 +57,7 @@ Rectangle {
         }
 
         PlotArea {
+            objectName: "plotArea"
             Layout.row: 1
             Layout.column: 2
             Layout.fillHeight: true
@@ -82,9 +83,15 @@ Rectangle {
 
         Legend {
             id: legend
+            objectName: "legend"
             Layout.row: 1
             Layout.column: 4
             Layout.alignment: Qt.AlignTop | Qt.AlignLeft
+            Layout.fillHeight: true
+            Layout.minimumHeight: 0
+            Layout.preferredHeight: 0
+            Layout.minimumWidth: 0
+            Layout.maximumWidth: plot.width * 0.3
             visible: scopedata.show_legend && scopedata.plot_items.length > 1
 
             scopedata: plot.scopedata

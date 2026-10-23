@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # Copyright (C) 2021 Timothée Lecomte
+# Copyright (C) 2026 Will Hirsch
 
 # This file is part of Friture.
 #
@@ -24,11 +25,13 @@ import numpy
 class Curve(QtCore.QObject):
     data_changed = QtCore.pyqtSignal()
     name_changed = QtCore.pyqtSignal(str)
+    color_changed = QtCore.pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self._name = ""
+        self._color = ""  # Empty keeps the view's default palette for other plots.
         self._x_array = numpy.array([0])
         self._y_array = numpy.array([0])
 
@@ -52,3 +55,13 @@ class Curve(QtCore.QObject):
         if self._name != name:
             self._name = name
             self.name_changed.emit(name)
+
+    @pyqtProperty(str, notify=color_changed)
+    def color(self):
+        return self._color
+
+    @color.setter
+    def color(self, color):
+        if self._color != color:
+            self._color = color
+            self.color_changed.emit(color)

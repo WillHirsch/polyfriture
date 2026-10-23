@@ -76,12 +76,15 @@ class PlotCurve(QQuickItem):
         # but there is a bug with the returned sip.array
         # whose total size is not interpreted correctly
         # `memoryview(geometry.vertexDataAsPoint2D()).nbytes` does not take itemsize into account
-        vertices = geometry.vertexData()
-        vertices.setsize(2 * np.dtype(np.float32).itemsize * size)
+        # Newly selected channels have no trace until a triggered window is
+        # available. Qt has no vertex buffer for an empty geometry.
+        if size:
+            vertices = geometry.vertexData()
+            vertices.setsize(2 * np.dtype(np.float32).itemsize * size)
 
-        polygon_array = np.frombuffer(vertices, dtype=np.float32)
-        polygon_array[: (size - 1) * 2 + 1 : 2] = np.asarray(self.curve.x_array() * self.width(), dtype=np.float32)
-        polygon_array[1 : (size - 1) * 2 + 2 : 2] = np.asarray(self.curve.y_array() * self.height(), dtype=np.float32)
+            polygon_array = np.frombuffer(vertices, dtype=np.float32)
+            polygon_array[: (size - 1) * 2 + 1 : 2] = np.asarray(self.curve.x_array() * self.width(), dtype=np.float32)
+            polygon_array[1 : (size - 1) * 2 + 2 : 2] = np.asarray(self.curve.y_array() * self.height(), dtype=np.float32)
 
         paint_node.markDirty(QSGNode.DirtyStateBit.DirtyGeometry)
 

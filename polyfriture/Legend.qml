@@ -1,4 +1,5 @@
 import QtQuick 2.15
+import QtQuick.Controls 2.15
 import QtQuick.Shapes 1.15
 import polyfriture 1.0
 import "plotItemColors.js" as PlotItemColors
@@ -8,32 +9,45 @@ Item {
 
     required property ScopeData scopedata
 
-    implicitWidth: childrenRect.width
-    
-    Column {
-        padding: 4
-        spacing: 4
+    implicitWidth: legendColumn.implicitWidth + verticalScrollBar.implicitWidth
 
-        Repeater {
-            model: scopedata.plot_items
+    Flickable {
+        objectName: "legendViewport"
+        anchors.fill: parent
+        clip: true
+        contentWidth: legendColumn.implicitWidth
+        contentHeight: legendColumn.implicitHeight
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.AutoFlickIfNeeded
+        ScrollBar.vertical: ScrollBar { id: verticalScrollBar }
+        ScrollBar.horizontal: ScrollBar {}
 
-            Row {
-                spacing: 4
-                Shape {
-                    implicitWidth: 20
-                    implicitHeight: 1
-                    anchors.verticalCenter: curve1legend.verticalCenter
-                    ShapePath {
-                        strokeWidth: 1
-                        strokeColor: PlotItemColors.color(index)
-                        fillColor: "transparent"
-                        PathLine { x: 20; y: 0 }
+        Column {
+            id: legendColumn
+            padding: 4
+            spacing: 4
+
+            Repeater {
+                model: scopedata.plot_items
+
+                Row {
+                    spacing: 4
+                    Shape {
+                        implicitWidth: 20
+                        implicitHeight: 1
+                        anchors.verticalCenter: curve1legend.verticalCenter
+                        ShapePath {
+                            strokeWidth: 1
+                            strokeColor: modelData.color || PlotItemColors.color(index)
+                            fillColor: "transparent"
+                            PathLine { x: 20; y: 0 }
+                        }
                     }
-                }
-                Text {
-                    id: curve1legend
-                    text: modelData.name
-                    color: systemPalette.windowText
+                    Text {
+                        id: curve1legend
+                        text: modelData.name
+                        color: systemPalette.windowText
+                    }
                 }
             }
         }

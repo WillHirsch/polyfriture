@@ -32,6 +32,7 @@ from polyfriture.qml_tools import qml_path
 from polyfriture.application import QML_MODULE
 
 from polyfriture.axis import Axis
+from polyfriture.colorBar import ColorBar
 from polyfriture.curve import Curve
 from polyfriture.filled_curve import FilledCurve
 from polyfriture.level_data import LevelData
@@ -87,6 +88,8 @@ def _register_qml_types():
     qmlRegisterType(PlotFilledCurve, QML_MODULE, 1, 0, 'PlotFilledCurve')
     qmlRegisterType(SpectrogramItem, QML_MODULE, 1, 0, 'SpectrogramItem')
     qmlRegisterType(SpectrogramImageData, QML_MODULE, 1, 0, 'SpectrogramImageData')
+    qmlRegisterType(ColorBar, QML_MODULE, 1, 0, 'ColorBar')
+    qmlRegisterType(Tick, QML_MODULE, 1, 0, 'Tick')
     qmlRegisterType(Tick, QML_MODULE, 1, 0, 'Tick')
     qmlRegisterType(TileLayout, QML_MODULE, 1, 0, 'TileLayout')
     qmlRegisterType(Burst_Generator_Settings_View_Model, QML_MODULE, 1, 0, 'Burst_Generator_Settings_View_Model')
