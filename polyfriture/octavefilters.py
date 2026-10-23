@@ -35,6 +35,12 @@ import polyfriture.renard as renard
 # 23 ms budget for all bands-per-octave settings.
 FIR_LENGTH = 512
 
+def octave_decimations(bandsperoctave):
+    """Per-band sample decimation, shared by filtering and panel smoothing."""
+    return [2 ** octave for octave in range(NOCTAVE - 1, -1, -1)
+            for _ in range(bandsperoctave)]
+
+
 class Octave_Filters():
 
     FIR_LENGTH = FIR_LENGTH
@@ -59,9 +65,7 @@ class Octave_Filters():
         return y, dec
 
     def get_decs(self):
-        decs = [2 ** j for j in range(0, NOCTAVE)[::-1] for i in range(0, self.bandsperoctave)]
-
-        return decs
+        return octave_decimations(self.bandsperoctave)
 
     def reset(self):
         for overlap in self._overlaps_oct + self._overlaps_dec:

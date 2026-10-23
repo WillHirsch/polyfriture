@@ -91,25 +91,27 @@ def test_octave_clears_filter_tails_smoothing_peaks_and_labels(panel_parent, con
     attach(panel, configured_buffer)
     panel.setbandsperoctave(3)
     panel.handle_new_data(np.ones((2, 1024)))
-    assert np.any(panel.dispbuffers)
-    assert any(np.any(state) for state in panel.filters._overlaps_oct)
-    previous_labels = tuple(panel.PlotZoneSpect.view_model()._bar_labels)
+    previous = list(panel._channels.values())
+    assert all(np.any(state.dispbuffers) for state in previous)
+    assert all(any(np.any(overlap) for overlap in state.filters._overlaps_oct) for state in previous)
+    previous_labels = [label for state in previous for label in state.plot.view_model()._bar_labels]
     assert previous_labels
-    panel.PlotZoneSpect.pause()
+    panel.pause()
 
     replace_channels(configured_buffer)
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
-    assert not np.any(panel.dispbuffers)
-    assert all(not np.any(state) for state in panel.filters._overlaps_oct + panel.filters._overlaps_dec)
-    assert panel.PlotZoneSpect.peak.size == 0
-    assert not panel.PlotZoneSpect.view_model()._bar_labels
-    for label in previous_labels:
-        QCoreApplication.sendPostedEvents(label, QEvent.Type.DeferredDelete)
-        assert sip.isdeleted(label)
-    assert panel.PlotZoneSpect.paused
-    assert panel.filters.bandsperoctave == 3
+    assert tuple(panel._channels) == (2, 3)
+    assert all(sip.isdeleted(label) for label in previous_labels)
+    for state in panel._channels.values():
+        assert not np.any(state.dispbuffers)
+        assert all(not np.any(overlap) for overlap in state.filters._overlaps_oct + state.filters._overlaps_dec)
+        assert state.plot.peak.size == 0
+        assert not state.plot.view_model()._bar_labels
+        assert state.plot.paused
+        assert state.filters.bandsperoctave == 3
     panel.handle_new_data(np.zeros((2, 1024)))
-    assert not np.any(panel.dispbuffers)
+    assert all(not np.any(state.dispbuffers) for state in panel._channels.values())
 
 
 def test_long_levels_clears_filter_and_history(panel_parent, configured_buffer):

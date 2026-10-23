@@ -29,8 +29,8 @@ class HistPlot_Data(Scope_Data):
     bar_labels_changed = QtCore.pyqtSignal()
     bar_labels_x_distance_changed = QtCore.pyqtSignal()
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, parent=None, *, axes=None):
+        super().__init__(parent, axes=axes)
 
         self._bar_labels = []
         self._bar_labels_x_distance = 0.
