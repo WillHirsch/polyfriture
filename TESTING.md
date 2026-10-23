@@ -28,16 +28,9 @@ Windows and macOS use the PortAudio library bundled with the locked
 `sounddevice` wheel. The source suite does not need the packaging scripts,
 PyInstaller output, a source-built PortAudio, or a virtual audio device.
 
-To reproduce a CI Python version, set `UV_PYTHON` to `3.11` or `3.14` before
-both commands. For example, in PowerShell:
-
-```powershell
-$env:UV_PYTHON = '3.14'
-uv sync --frozen --dev
-uv run --frozen pytest -ra --junitxml=test-results/junit.xml
-```
-
-`UV_PYTHON` takes precedence over the repository's `.python-version` file.
+The commands above use the Python version selected by [`.python-version`](.python-version),
+the same pin used by packaging and source CI. Unset any `UV_PYTHON` override
+when reproducing CI locally; it takes precedence over that file.
 CI pins uv to 0.10.5 and installs project and development dependencies from
 `uv.lock`; it does not update the lock file or install an additional pytest
 version independently.
@@ -46,17 +39,16 @@ version independently.
 
 [The source-test workflow](.github/workflows/tests.yml) runs this matrix:
 
-| Runner | Python versions |
+| Runner | Python version |
 | --- | --- |
-| Ubuntu 22.04 | 3.11, 3.14 |
-| Windows Server 2022 | 3.11, 3.14 |
-| macOS 15 | 3.11, 3.14 |
+| Ubuntu 22.04 | Repository `.python-version` |
+| Windows Server 2022 | Repository `.python-version` |
+| macOS 15 | Repository `.python-version` |
 
-Python 3.11 covers the declared minimum. Python 3.14 provides a newer
-interpreter with binary-wheel coverage in the current lock file; this initial
-matrix does not claim to test every permitted Python version. In particular,
-the locked NumPy 2.4.6 has wheels through Python 3.14. Changing this matrix or
-adding a dependency-upgrade lane is an explicit future policy change.
+The project pin is the canonical development and packaging target. The
+`requires-python` range in `pyproject.toml` permits other interpreters, but
+does not require an additional CI lane for each version. Changing this matrix
+or adding a dependency-upgrade lane is an explicit future policy change.
 
 Every pull request and push to `main` runs the entire discovered suite.
 Superseded PR test runs are cancelled. Matrix jobs continue independently
@@ -66,7 +58,7 @@ after another job fails, so platform-specific failures remain visible.
 
 - **Pull requests:** the stable `Source tests` check succeeds only when every
   matrix job succeeds. This is the check to require in the `main` branch
-  ruleset, rather than maintaining six version-specific required check names.
+  ruleset, rather than maintaining platform-specific required check names.
   Workflow files report checks; enforcement of required checks is configured
   separately in the repository's branch rules.
 - **Packaging:** the existing build jobs and packaged-application launch
@@ -86,7 +78,7 @@ artifact upload behavior is unchanged.
 
 Each matrix job records Python, uv, pytest, NumPy, PyQt, compiled/runtime Qt,
 and PortAudio versions. Console output, environment details, and JUnit XML are
-uploaded as OS/Python-specific artifacts with 14-day retention, including on
+uploaded as OS-specific artifacts with 14-day retention, including on
 test failure. The job's console log remains available if artifact upload fails.
 `-ra` makes skip reasons visible.
 

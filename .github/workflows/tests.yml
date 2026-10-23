@@ -20,16 +20,14 @@ defaults:
 
 jobs:
   pytest:
-    name: Tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    name: Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, windows-2022, macos-15]
-        python: ['3.11', '3.14']
     env:
-      UV_PYTHON: ${{ matrix.python }}
       QT_QPA_PLATFORM: offscreen
       QT_QUICK_CONTROLS_STYLE: Basic
       QT_QUICK_BACKEND: software
@@ -41,7 +39,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: ${{ matrix.python }}
+          python-version-file: .python-version
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
@@ -87,7 +85,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
-          name: source-tests-${{ matrix.os }}-python-${{ matrix.python }}
+          name: source-tests-${{ matrix.os }}
           path: test-results/
           retention-days: 14
           if-no-files-found: warn
