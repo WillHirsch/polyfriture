@@ -17,7 +17,7 @@
 | `polyfriture/audioproc.py`  | `audioproc` — FFT analysis for the spectrum widget         |
 | `polyfriture/dockmanager.py`| `DockManager` — manages dock creation/closure/ordering     |
 | `polyfriture/dock.py`       | `Dock` — QML dock container hosting an audio widget         |
-| `polyfriture/widgetdict.py` | Registry of available visualization widgets (7 types)      |
+| `polyfriture/widgetdict.py` | Registry of available panels (8 types, including Generator) |
 | `polyfriture/store.py`      | `Store` singleton exposed to QML for dock state              |
 | `polyfriture/plotting/`     | Plotting infrastructure (CoordinateTransform, ScaleDivision, frequency scales, color maps) |
 | `polyfriture/signal/`       | Signal processing modules (IIR/FIR filters, resampling, transforms) |
@@ -64,8 +64,9 @@ Available widgets (see `widgetdict.py`):
 | 3         | `Spectrogram_Widget` | `Spectrogram.qml` | 2D rolling spectrogram |
 | 4         | `OctaveSpectrum_Widget` | `OctaveSpectrum.qml` | Octave-band spectrum |
 | 5         | `Generator_Widget` | `Generator.qml` | Signal generator        |
-| 7         | `LongLevelWidget`  | —               | Long-time level meters  |
+| 7         | `LongLevelWidget`  | `LongLevels.qml` | Long-time level histories |
 | 8         | `PitchTrackerWidget` | `PitchView.qml` | Pitch tracking         |
+| 9         | `Levels_Widget`    | `Levels.qml`    | Channel-grid level meters |
 | 9         | `Levels_Widget` | `Levels.qml` | Channel peak/RMS meters |
 
 ### Signal Processing

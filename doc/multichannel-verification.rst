@@ -155,7 +155,8 @@ timestamps, environment, backlog, requested/actual geometry, errors and warnings
 All cases had zero operational QML warnings and Python slot errors. Each native
 case recorded 14 nonfatal ControlBar binding warnings during final object
 destruction after its view models became null; these remain visible in the raw
-results rather than being counted as runtime errors. The exploratory baseline
+results rather than being counted as runtime errors. The headless case recorded
+the same 14 shutdown warnings. The exploratory baseline
 also hit two Windows INI ``AccessError`` results while load probes were running;
 the complete initialization tests then passed in isolation, and the final full
 source run passed all 657 tests without skips or expected-failure exclusions.
