@@ -19,202 +19,155 @@
 # along with Friture.  If not, see <http://www.gnu.org/licenses/>.
 
 from PyQt6.QtCore import QObject
-from numpy import log10, argmax, zeros, arange, floor, float64, ones
-from polyfriture.audioproc import audioproc  # audio processing class
-from polyfriture.spectrum_settings import (Spectrum_Settings_Dialog,  # settings dialog
-                                       DEFAULT_FFT_SIZE,
-                                       DEFAULT_FREQ_SCALE,
-                                       DEFAULT_MAXFREQ,
-                                       DEFAULT_MINFREQ,
-                                       DEFAULT_SPEC_MIN,
-                                       DEFAULT_SPEC_MAX,
-                                       DEFAULT_WEIGHTING,
-                                       DEFAULT_RESPONSE_TIME,
-                                       DEFAULT_SHOW_FREQ_LABELS)
-import polyfriture.plotting.frequency_scales as fscales
+from numpy import log10, argmax, zeros, arange, floor, float64
 
+from polyfriture.audioproc import audioproc
+from polyfriture.spectrum_settings import (
+    Spectrum_Settings_Dialog, DEFAULT_FFT_SIZE, DEFAULT_FREQ_SCALE,
+    DEFAULT_MAXFREQ, DEFAULT_MINFREQ, DEFAULT_SPEC_MIN, DEFAULT_SPEC_MAX,
+    DEFAULT_WEIGHTING, DEFAULT_RESPONSE_TIME, DEFAULT_SHOW_FREQ_LABELS,
+    DEFAULT_SHOW_PITCH_LABELS,
+)
+import polyfriture.plotting.frequency_scales as fscales
 from polyfriture.audiobackend import SAMPLING_RATE
+from polyfriture.scope_data import Scope_Data
 from polyfriture.spectrumPlotWidget import SpectrumPlotWidget
+from polyfriture.pitch_tracker import format_frequency
 from polyfriture.signal.exp_smoothing import exp_smoothed_value_2d
 
 
-class Spectrum_Widget(QObject):
+class SpectrumChannel(QObject):
+    """Mutable smoothing, peaks and annotations for one capture row."""
 
+    def __init__(self, panel, label):
+        super().__init__(panel)
+        self.plot = SpectrumPlotWidget(self, axes=panel._grid_data)
+        self.plot.view_model().label = label
+        self.dispbuffer = zeros(len(panel.freq))
+        self.plot.setShowFreqLabel(panel.show_frequency_labels)
+        self.plot.setShowPitchLabel(panel.show_pitch_labels)
+        self.plot.paused = panel.paused
+        self.plot.reset()
+
+
+class Spectrum_Widget(QObject):
     def __init__(self, parent):
         super().__init__(parent)
-
         self.audiobuffer = None
-        self.PlotZoneSpect = SpectrumPlotWidget(self)
-
-        # initialize the class instance that will do the fft
-        self.proc = audioproc()
-
+        self._grid_data = Scope_Data(self)
+        self._channels = {}
+        self.paused = False
+        self.old_index = 0
+        self.overlap = 3. / 4.
         self.maxfreq = DEFAULT_MAXFREQ
-        self.proc.set_maxfreq(self.maxfreq)
         self.minfreq = DEFAULT_MINFREQ
         self.fft_size = 2 ** DEFAULT_FFT_SIZE * 32
-        self.proc.set_fftsize(self.fft_size)
         self.spec_min = DEFAULT_SPEC_MIN
         self.spec_max = DEFAULT_SPEC_MAX
         self.weighting = DEFAULT_WEIGHTING
         self.response_time = DEFAULT_RESPONSE_TIME
+        self.show_frequency_labels = DEFAULT_SHOW_FREQ_LABELS
+        self.show_pitch_labels = DEFAULT_SHOW_PITCH_LABELS
 
-        self.update_weighting()
+        # audioproc only caches the shared window, frequency bins and weights;
+        # analyzelive does not retain samples or any channel history.
+        self.proc = audioproc()
+        self.proc.set_maxfreq(self.maxfreq)
+        self.proc.set_fftsize(self.fft_size)
         self.freq = self.proc.get_freq_scale()
-
-        self.old_index = 0
-        self.overlap = 3. / 4.
-
-        self.update_display_buffers()
-
-        # set kernel and parameters for the smoothing filter
+        self.update_weighting()
         self.setresponsetime(self.response_time)
 
-        self.PlotZoneSpect.setfreqscale(fscales.Mel) # matches DEFAULT_FREQ_SCALE = 2 #Mel
-        self.PlotZoneSpect.setfreqrange(self.minfreq, self.maxfreq)
-        self.PlotZoneSpect.setspecrange(self.spec_min, self.spec_max)
-        self.PlotZoneSpect.setweighting(self.weighting)
-        self.PlotZoneSpect.setShowFreqLabel(DEFAULT_SHOW_FREQ_LABELS)
-
-        # initialize the settings dialog
+        self._grid_data.vertical_axis.setTrackerFormatter(lambda x: "%.1f dB" % x)
+        self._grid_data.horizontal_axis.name = "Frequency (Hz)"
+        self._grid_data.horizontal_axis.setTrackerFormatter(format_frequency)
+        self._grid_data.horizontal_axis.show_minor_grid_lines = True
+        self.setfreqscale(fscales.ALL[DEFAULT_FREQ_SCALE])
+        self._grid_data.horizontal_axis.setRange(self.minfreq, self.maxfreq)
+        self._grid_data.vertical_axis.setRange(self.spec_min, self.spec_max)
+        self.setweighting(self.weighting)
         self.settings_dialog = Spectrum_Settings_Dialog(parent, self)
 
     def qml_file_name(self):
-        return self.PlotZoneSpect.qml_file_name()
-    
-    def view_model(self):
-        return self.PlotZoneSpect.view_model()
+        return "Spectrum.qml"
 
-    # method
+    def view_model(self):
+        return self._grid_data
+
     def set_buffer(self, buffer):
         self.audiobuffer = buffer
-        self.old_index = self.audiobuffer.ringbuffer.offset
+        self.reset_channel_state(buffer.channel_configuration)
 
     def reset_channel_state(self, configuration):
         self.old_index = self.audiobuffer.ringbuffer.offset
-        self.update_display_buffers()
-        self.PlotZoneSpect.reset()
+        previous = self._channels
+        self._channels = {} if configuration is None else {
+            channel_id: SpectrumChannel(self, label)
+            for channel_id, label in zip(configuration.channel_ids, configuration.channel_labels)
+        }
+        self._grid_data.set_channels([state.plot.view_model() for state in self._channels.values()])
+        for state in previous.values():
+            state.deleteLater()
 
     def log_spectrogram(self, sp):
-        # Note: implementing the log10 of the array in Cython did not bring
-        # any speedup.
-        # Idea: Instead of computing the log of the data, I could pre-compute
-        # a list of values associated with the colormap, and then do a search...
-        epsilon = 1e-30
-        return 10. * log10(sp + epsilon)
+        return 10. * log10(sp + 1e-30)
 
     def harmonic_product_spectrum(self, sp):
-        # Chose 3 harmonics for no particularly good reason; initial results
-        # for pitch detection are good.
-        product_count = 3
-  
-        harmonic_length = sp.shape[0] // product_count
-
-        # common case: product_count == 3 — multiply the three slices
-        # directly. This avoids allocating a temporary ones array and still
-        # doesn't make copies of the original `sp` beyond NumPy's routine
-        # temporary results for the elementwise multiplication.
-        if product_count == 3:
-            # Downsample and multiply
-            res = (sp[:harmonic_length]
-                   * sp[::2][:harmonic_length]
-                   * sp[::3][:harmonic_length])
-        else:
-            res = ones(harmonic_length, dtype=sp.dtype)
-            for i in range(1, product_count + 1):
-                res *= sp[::i][:harmonic_length]
-        return res
+        harmonic_length = sp.shape[0] // 3
+        return (sp[:harmonic_length] * sp[::2][:harmonic_length] * sp[::3][:harmonic_length])
 
     def handle_new_data(self, floatdata):
-        # we need to maintain an index of where we are in the buffer
+        if not self._channels:
+            return
         index = self.audiobuffer.ringbuffer.offset
-
         available = index - self.old_index
-
         if available < 0:
-            # ringbuffer must have grown or something...
             available = 0
             self.old_index = index
-
-        # if we have enough data to add a frequency column in the time-frequency plane, compute it
-        needed = self.fft_size * (1. - self.overlap)
+        needed = int(self.fft_size * (1. - self.overlap))
         realizable = int(floor(available / needed))
+        if not realizable:
+            return
 
-        if realizable > 0:
-            spectra = zeros((len(self.freq), realizable), dtype=float64)
+        # Read each frame once; every channel uses identical FFT and hop timing.
+        spectra = zeros((len(self._channels), len(self.freq), realizable), dtype=float64)
+        for frame in range(realizable):
+            samples = self.audiobuffer.data_indexed(self.old_index, self.fft_size)
+            for row in range(len(self._channels)):
+                spectra[row, :, frame] = self.proc.analyzelive(samples[row, :])
+            self.old_index += needed
+        for state, channel_spectra in zip(self._channels.values(), spectra):
+            spectrum = exp_smoothed_value_2d(self.kernel, self.alpha, channel_spectra, state.dispbuffer)
+            state.dispbuffer = spectrum
+            levels = self.log_spectrogram(spectrum) + self.w
+            fmax = self.freq[argmax(levels)]
+            fpitch = max(self.freq[argmax(self.harmonic_product_spectrum(spectrum))], 1e-20)
+            state.plot.setdata(self.freq, levels, fmax, fpitch)
 
-            for i in range(realizable):
-                floatdata = self.audiobuffer.data_indexed(self.old_index, self.fft_size)
-
-                # first channel
-                # FFT transform
-                spectra[:, i] = self.proc.analyzelive(floatdata[0, :])
-
-                self.old_index += int(needed)
-
-            # compute the widget data
-            spectrum = exp_smoothed_value_2d(self.kernel, self.alpha, spectra, self.dispbuffer)
-            # store result for next computation
-            self.dispbuffer = spectrum
-
-            spectrum.shape = self.freq.shape
-            self.w.shape = self.freq.shape
-
-            dB_spectrogram = self.log_spectrogram(spectrum) + self.w
-
-            # the log operation and the weighting could be deffered
-            # to the post-weedening !
-            i = argmax(dB_spectrogram)
-            fmax = self.freq[i]
-
-            # The maximum value in the harmonic product spectrum is quite
-            # likely to correspond to a fundamental frequency.
-            harmonic_products = self.harmonic_product_spectrum(spectrum)
-            pitch_idx = argmax(harmonic_products)
-            fpitch = max(self.freq[pitch_idx], 1e-20)
-
-            self.PlotZoneSpect.setdata(self.freq, dB_spectrogram, fmax, fpitch)
-
-    # method
     def canvasUpdate(self):
-        self.PlotZoneSpect.canvasUpdate()
+        for state in self._channels.values():
+            state.plot.canvasUpdate()
 
     def pause(self):
-        self.PlotZoneSpect.pause()
+        self.paused = True
+        for state in self._channels.values():
+            state.plot.pause()
 
     def restart(self):
-        self.PlotZoneSpect.restart()
+        self.paused = False
+        for state in self._channels.values():
+            state.plot.restart()
 
     def setresponsetime(self, response_time):
-        # time = SMOOTH_DISPLAY_TIMER_PERIOD_MS/1000. #DISPLAY
-        # time = 0.025 #IMPULSE setting for a sound level meter
-        # time = 0.125 #FAST setting for a sound level meter
-        # time = 1. #SLOW setting for a sound level meter
         self.response_time = response_time
-
-        # an exponential smoothing filter is a simple IIR filter
-        # y_i     = a*x_i     + (1-a)*y_{i-1}
-        #
-        # we can unroll the recurrence a bit:
-        # y_{i+1} = a*x_{i+1} + (1-a)*y_i
-        #         = a*x_{i+1} + (1-a)*a*x_i + (1-a)^2*y_{i-1}
-        # y_{i+2} = a*x_{i+2} + (1-a)*y_{i+1}
-        #         = a*x_{i+2} + (1-a)*a*x_{i+1} + (1-a)^2*a*x_i + (1-a)^3*y_{i-1}
-        # ...
-        # we compute alpha so that the N most recent samples represent 100*w percent of the output
-        w = 0.65
-        delta_n = self.fft_size * (1. - self.overlap)
-        n = self.response_time * SAMPLING_RATE / delta_n
-        N = 2 * 4096
-        self.alpha = 1. - (1. - w) ** (1. / (n + 1))
-        self.kernel = self.compute_kernel(self.alpha, N)
-
-    def compute_kernel(self, alpha, N):
-        kernel = (1. - alpha) ** arange(N - 1, -1, -1)
-        return kernel
+        n = response_time * SAMPLING_RATE / (self.fft_size * (1. - self.overlap))
+        self.alpha = 1. - (1. - 0.65) ** (1. / (n + 1))
+        self.kernel = (1. - self.alpha) ** arange(8191, -1, -1)
 
     def update_display_buffers(self):
-        self.dispbuffer = zeros(len(self.freq))
+        for state in self._channels.values():
+            state.dispbuffer = zeros(len(self.freq))
+            state.plot.reset()
 
     def setminfreq(self, minfreq):
         self.setMinMaxFreq(minfreq, self.maxfreq)
@@ -223,62 +176,52 @@ class Spectrum_Widget(QObject):
         self.setMinMaxFreq(self.minfreq, maxfreq)
 
     def setMinMaxFreq(self, minfreq, maxfreq):
-        self.minfreq = minfreq
-        self.maxfreq = maxfreq
-
-        realmin = min(self.minfreq, self.maxfreq)
-        realmax = max(self.minfreq, self.maxfreq)
-
-        self.proc.set_maxfreq(realmax)
-
+        self.minfreq, self.maxfreq = minfreq, maxfreq
+        self.proc.set_maxfreq(max(minfreq, maxfreq))
         self.freq = self.proc.get_freq_scale()
         self.update_display_buffers()
         self.update_weighting()
-        # reset kernel and parameters for the smoothing filter
         self.setresponsetime(self.response_time)
+        self._grid_data.horizontal_axis.setRange(min(minfreq, maxfreq), max(minfreq, maxfreq))
 
-        self.PlotZoneSpect.setfreqrange(realmin, realmax)
+    def setfreqscale(self, scale):
+        self._grid_data.horizontal_axis.setScale(scale)
 
     def setfftsize(self, fft_size):
         self.fft_size = fft_size
-        self.proc.set_fftsize(self.fft_size)
+        self.proc.set_fftsize(fft_size)
         self.freq = self.proc.get_freq_scale()
         self.update_display_buffers()
         self.update_weighting()
-        # reset kernel and parameters for the smoothing filter
         self.setresponsetime(self.response_time)
 
     def setmin(self, value):
         self.spec_min = value
-        self.PlotZoneSpect.setspecrange(self.spec_min, self.spec_max)
+        self._grid_data.vertical_axis.setRange(min(self.spec_min, self.spec_max), max(self.spec_min, self.spec_max))
 
     def setmax(self, value):
         self.spec_max = value
-        self.PlotZoneSpect.setspecrange(self.spec_min, self.spec_max)
+        self._grid_data.vertical_axis.setRange(min(self.spec_min, self.spec_max), max(self.spec_min, self.spec_max))
 
     def setweighting(self, weighting):
         self.weighting = weighting
-        self.PlotZoneSpect.setweighting(weighting)
+        suffix = ("", " A", " B", " C")[weighting]
+        self._grid_data.vertical_axis.name = "PSD (dB%s)" % suffix
         self.update_weighting()
 
     def update_weighting(self):
-        A, B, C = self.proc.get_freq_weighting()
-        if self.weighting == 0:
-            self.w = zeros(A.shape)
-        elif self.weighting == 1:
-            self.w = A
-        elif self.weighting == 2:
-            self.w = B
-        else:
-            self.w = C
+        weights = self.proc.get_freq_weighting()
+        self.w = zeros(weights[0].shape) if self.weighting == 0 else weights[self.weighting - 1]
 
-        self.w.shape = (1, self.w.size)
+    def setShowFreqLabel(self, show):
+        self.show_frequency_labels = show
+        for state in self._channels.values():
+            state.plot.setShowFreqLabel(show)
 
-    def setShowFreqLabel(self, showFreqLabel):
-        self.PlotZoneSpect.setShowFreqLabel(showFreqLabel)
-
-    def setShowPitchLabel(self, showPitchLabel):
-        self.PlotZoneSpect.setShowPitchLabel(showPitchLabel)
+    def setShowPitchLabel(self, show):
+        self.show_pitch_labels = show
+        for state in self._channels.values():
+            state.plot.setShowPitchLabel(show)
 
     def settings_called(self, checked):
         self.settings_dialog.show()
@@ -288,3 +231,8 @@ class Spectrum_Widget(QObject):
 
     def restoreState(self, settings):
         self.settings_dialog.restoreState(settings)
+
+    def cleanup(self):
+        self._grid_data.set_channels([])
+        self.settings_dialog.close()
+        self.settings_dialog.deleteLater()

@@ -67,19 +67,22 @@ def test_spectrum_clears_smoothing_peaks_and_labels_while_paused(panel_parent, c
     panel.setresponsetime(1.)
     configured_buffer.ringbuffer.push(np.ones((2, panel.fft_size * 2)), 1.)
     panel.handle_new_data(np.ones((2, panel.fft_size * 2)))
-    assert np.any(panel.dispbuffer)
-    assert panel.PlotZoneSpect.peak.size
+    previous = list(panel._channels.values())
+    assert all(np.any(state.dispbuffer) for state in previous)
+    assert all(state.plot.peak.size for state in previous)
     panel.pause()
 
     replace_channels(configured_buffer)
 
     assert panel.old_index == 0
-    assert not np.any(panel.dispbuffer)
-    assert panel.PlotZoneSpect.peak.size == 0
-    assert panel.PlotZoneSpect._curve_signal.y_array().size == 0
-    assert panel.PlotZoneSpect.view_model().fmaxValue == ""
-    assert panel.PlotZoneSpect.view_model().fpitchDisplayText == ""
-    assert panel.PlotZoneSpect.paused
+    assert tuple(panel._channels) == (2, 3)
+    for state in panel._channels.values():
+        assert not np.any(state.dispbuffer)
+        assert state.plot.peak.size == 0
+        assert state.plot._curve_signal.y_array().size == 0
+        assert state.plot.view_model().fmaxValue == ""
+        assert state.plot.view_model().fpitchDisplayText == ""
+        assert state.plot.paused
     assert panel.response_time == 1.
 
 
