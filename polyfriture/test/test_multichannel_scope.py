@@ -224,6 +224,10 @@ def test_qml_legend_scrolls_without_squeezing_plot_and_replaces_all_traces(scope
 def test_shared_plot_qml_still_accepts_history_and_spectrogram_models(panel_type, qml_types, qt_application):
     parent = QWidget()
     panel = panel_type(parent)
+    if panel_type is LongLevelWidget:
+        buffer = AudioBuffer()
+        buffer.handle_configuration_changed(ChannelConfiguration(0, (0,), 1, 1))
+        panel.set_buffer(buffer)
     engine = QQmlEngine()
     engine.rootContext().setContextProperty("viewModel", panel.view_model())
     component = QQmlComponent(engine, qml_url(panel.qml_file_name()))
@@ -233,6 +237,9 @@ def test_shared_plot_qml_still_accepts_history_and_spectrogram_models(panel_type
         assert root is not None, [error.toString() for error in component.errors()]
         assert panel.view_model().horizontal_axis is not None
         if panel_type is LongLevelWidget:
+            root.setWidth(800)
+            root.setHeight(600)
+            qt_application.processEvents()
             rendered = plot_curves(root)
             assert len(rendered) == 1
             assert rendered[0].color.name() == "#ff0000"
@@ -240,6 +247,8 @@ def test_shared_plot_qml_still_accepts_history_and_spectrogram_models(panel_type
             assert panel.view_model().show_color_axis
         root.deleteLater()
     finally:
+        if hasattr(panel, "cleanup"):
+            panel.cleanup()
         engine.deleteLater()
         parent.deleteLater()
         flush_deletions()

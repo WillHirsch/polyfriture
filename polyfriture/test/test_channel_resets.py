@@ -121,15 +121,19 @@ def test_long_levels_clears_filter_and_history(panel_parent, configured_buffer):
     panel.setresptime(0.5)
     configured_buffer.ringbuffer.push(np.ones((2, 2048)), 1.)
     panel.handle_new_data(np.ones((2, 2048)))
-    assert panel.ringbuffer.offset
-    assert np.any(panel.zf)
+    previous = tuple(panel._channels.values())
+    assert all(channel.ringbuffer.offset for channel in previous)
+    assert all(np.any(channel.zf) for channel in previous)
 
     replace_channels(configured_buffer)
 
-    assert panel.old_index == panel.ringbuffer.offset == 0
-    assert not np.any(panel.zf)
-    assert all(not np.any(state) for state in panel.subsampler.zfs)
-    assert panel._curve.y_array().size == 0
+    assert panel.old_index == 0
+    assert tuple(panel._channels) == (2, 3)
+    for channel in panel._channels.values():
+        assert channel.ringbuffer.offset == 0
+        assert not np.any(channel.zf)
+        assert all(not np.any(state) for state in channel.subsampler.zfs)
+        assert channel.curve.y_array().size == 0
     assert panel.length_seconds == 30.
     assert panel.response_time == 0.5
 
