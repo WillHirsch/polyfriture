@@ -43,6 +43,8 @@ Notepad++
 .qt_for_python
 
 .mypy_cache
+.pytest_cache/
+test-results/
 
 # Macos
 .DS_Store

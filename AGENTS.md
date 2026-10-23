@@ -93,11 +93,15 @@ Dependencies are managed by `uv` (see `uv.lock`). See `INSTALL.md` for platform-
 
 | Command              | Tool   | Purpose                          |
 |----------------------|--------|----------------------------------|
-| `uv run pytest`      | pytest | Run the test suite (`polyfriture/test/`) |
+| `uv run --frozen pytest -ra` | pytest | Run the full discovered source suite (`polyfriture/test/`) |
 | `uv run mypy`        | mypy   | Type-check the codebase           |
 | `uv run python main.py` | —   | Run the application              |
 
 Tests live in `polyfriture/test/` and cover signal processing, filters, pitch tracking, and QML integration.
+
+See [TESTING.md](TESTING.md) for the source-test CI matrix and merge/release
+policy. The suite supplies headless Qt defaults and isolates settings and audio
+access. Source tests run separately from packaging; tagged releases require both.
 
 ## Regenerating Generated Files
 
