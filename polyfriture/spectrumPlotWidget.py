@@ -61,6 +61,16 @@ class SpectrumPlotWidget(QObject):
     def view_model(self):
         return self._spectrum_data
 
+    def reset(self):
+        self.peak = zeros(0)
+        self.peak_int = zeros(0)
+        self.peak_decay = zeros(0)
+        empty = zeros(0)
+        self._curve_signal.setData(empty, empty, empty, empty, 1.)
+        self._curve_peak.setData(empty, empty, empty, empty, 1.)
+        self._spectrum_data.setFmax("", 0.)
+        self._spectrum_data.setFpitch("", 0.)
+
     def setfreqscale(self, scale):
         self.normHorizontalScaleTransform.setScale(scale)
         self._spectrum_data.horizontal_axis.setScale(scale)

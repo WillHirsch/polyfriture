@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # Copyright (C) 2009 Timothée Lecomte
+# Copyright (C) 2026 Will Hirsch
 
 # This file is part of Friture.
 #
@@ -24,8 +25,9 @@ import time
 from PyQt6 import QtCore
 import sounddevice
 import rtmixer
-from numpy import ndarray, vstack, int8, int16, float64, float32, frombuffer, concatenate
+from numpy import ndarray, int8, int16, float64, float32, frombuffer, concatenate
 import numpy as np
+from polyfriture.channel_configuration import ChannelConfiguration
 
 # the sample rate below should be dynamic, taken from PyAudio/PortAudio
 SAMPLING_RATE = 48000
@@ -69,7 +71,8 @@ def AudioBackend():
 class __AudioBackend(QtCore.QObject):
 
     underflow = QtCore.pyqtSignal()
-    new_data_available = QtCore.pyqtSignal(ndarray, float, bool)
+    configuration_changed = QtCore.pyqtSignal(object)
+    new_data_available = QtCore.pyqtSignal(ndarray, float, bool, int)
 
     def __init__(self):
         QtCore.QObject.__init__(self)
@@ -77,6 +80,8 @@ class __AudioBackend(QtCore.QObject):
         self.logger = logging.getLogger(__name__)
 
         self.duo_input = False
+        self.channel_configuration = None
+        self.running = True
 
         self.logger.info("Initializing audio backend")
 
@@ -94,29 +99,15 @@ class __AudioBackend(QtCore.QObject):
         self.ringBuffer = None
         self.action = None
         self.nchannels_max = 0
+        self.stream_start_time = 0.
+        self.stream_read_index = 0
+        self.xruns = 0
 
         # we will try to open all the input devices until one
         # works, starting by the default input device
-        for device in self.input_devices:
-            try:
-                (self.stream, self.ringBuffer, self.action, self.nchannels_max) = self.open_stream(device)
-                self.stream.start()
-                self.device = device
-                self.logger.info("Success")
+        for index in range(len(self.input_devices)):
+            if self.select_input_device(index)[0]:
                 break
-            except Exception:
-                self.logger.exception("Failed to open stream")
-
-        if self.device is not None:
-            self.first_channel = 0
-            nchannels = self.get_current_device_nchannels()
-            if nchannels == 1:
-                self.second_channel = 0
-            else:
-                self.second_channel = 1
-
-        # counter for the number of input buffer overflows
-        self.xruns = 0
 
         self.chunk_number = 0
 
@@ -129,8 +120,20 @@ class __AudioBackend(QtCore.QObject):
 
     def close(self):
         if self.stream is not None:
-            self.stream.stop()
+            self._retire_stream(self.stream)
             self.stream = None
+        self.ringBuffer = None
+        self.action = None
+        self.running = False
+
+    def _retire_stream(self, stream):
+        # An unplugged old device must not turn a committed replacement into
+        # an apparent failure, or prevent the remaining resources being closed.
+        for operation in (stream.stop, stream.close):
+            try:
+                operation()
+            except Exception:
+                self.logger.exception("Failed to retire audio stream")
 
     # method
     def get_readable_devices_list(self):
@@ -283,62 +286,86 @@ class __AudioBackend(QtCore.QObject):
     # The index parameter is the index in the self.input_devices list of devices !
     # The return parameter is also an index in the same list.
     def select_input_device(self, index):
+        current_index = self.get_readable_current_device()
+        if isinstance(index, bool) or not isinstance(index, (int, np.integer)) or not 0 <= index < len(self.input_devices):
+            return False, current_index
         device = self.input_devices[index]
+        if device is self.device and self.stream is not None:
+            return True, current_index
 
-        # save current stream in case we need to restore it
-        previous_stream = self.stream
-        previous_ringBuffer = self.ringBuffer
-        previous_action = self.action
-        previous_nchannels_max = self.nchannels_max
-        previous_device = self.device
-
-        self.logger.info("Trying to open input device #%d", index)
-
+        # Prepare the candidate without mutating the active configuration. A
+        # failed open/start must leave the old stream and analysis usable.
+        candidate = None
         try:
-            (self.stream, self.ringBuffer, self.action, self.nchannels_max) = self.open_stream(device)
-            self.device = device
-            self.stream.start()
-            self.stream_start_time = self.stream.time
-            self.stream_read_index = 0
-            success = True
+            candidate, ringbuffer, action, channel_count = self.open_stream(device)
+            if self.running:
+                candidate.start()
+            start_time = candidate.time
+            generation = 1 if self.channel_configuration is None else self.channel_configuration.generation + 1
+            channels = (0, min(1, channel_count - 1)) if self.duo_input else (0,)
+            configuration = ChannelConfiguration(device['index'], channels, channel_count, generation)
         except Exception:
             self.logger.exception("Failed to open input device")
-            success = False
-            if self.stream is not None:
-                self.stream.stop()
-            # restore previous stream
-            self.stream = previous_stream
-            self.ringBuffer = previous_ringBuffer
-            self.action = previous_action
-            self.nchannels_max = previous_nchannels_max
-            self.device = previous_device
+            if candidate is not None:
+                self._retire_stream(candidate)
+            return False, current_index
 
-        if success:
-            self.logger.info("Success")
+        previous_stream = self.stream
+        self.stream, self.ringBuffer, self.action = candidate, ringbuffer, action
+        self.device, self.nchannels_max = device, channel_count
+        self.first_channel, self.second_channel = 0, min(1, channel_count - 1)
+        self.stream_start_time, self.stream_read_index = start_time, 0
+        self.xruns = action.stats.input_overflows
+        self._publish_configuration(configuration)
+        if previous_stream is not None:
+            self._retire_stream(previous_stream)
+        return True, index
 
-            if previous_stream is not None:
-                previous_stream.stop()
+    def _publish_configuration(self, configuration):
+        # Drop pre-change samples, including partial blocks. New array rows
+        # must never be interpreted with the previous generation's identities.
+        pending = self.ringBuffer.read_available
+        self.ringBuffer.advance_read_index(pending)
+        self.stream_read_index += pending
+        self.channel_configuration = configuration
+        self.configuration_changed.emit(configuration)
 
-            self.first_channel = 0
-            nchannels = self.device['max_input_channels']
-            if nchannels == 1:
-                self.second_channel = 0
-            else:
-                self.second_channel = 1
+    def select_channels(self, channel_ids):
+        """Select any nonempty subset; delivery is in physical-channel order."""
+        if self.device is None:
+            raise ValueError("no input device is configured")
+        current = self.channel_configuration
+        configuration = ChannelConfiguration(self.device['index'], channel_ids, self.nchannels_max,
+                                               current.generation + 1)
+        if configuration.channel_ids == current.channel_ids:
+            return current
+        self._publish_configuration(configuration)
+        return configuration
 
-        return success, self.input_devices.index(self.device)
+    def _select_legacy_channels(self):
+        if self.device is not None:
+            channels = (self.first_channel, self.second_channel) if self.duo_input else (self.first_channel,)
+            self.select_channels(channels)
+
+    def _valid_channel(self, channel):
+        return (not isinstance(channel, bool) and isinstance(channel, (int, np.integer))
+                and 0 <= channel < self.nchannels_max)
 
     # method
     def select_first_channel(self, index):
+        if not self._valid_channel(index):
+            return False, self.first_channel
         self.first_channel = index
-        success = True
-        return success, self.first_channel
+        self._select_legacy_channels()
+        return True, self.first_channel
 
     # method
     def select_second_channel(self, index):
+        if not self._valid_channel(index):
+            return False, self.second_channel
         self.second_channel = index
-        success = True
-        return success, self.second_channel
+        self._select_legacy_channels()
+        return True, self.second_channel
 
     # method
     def open_stream(self, device):
@@ -355,25 +382,20 @@ class __AudioBackend(QtCore.QObject):
             # latency=latency,
             samplerate=SAMPLING_RATE)
 
-        sampleSize = 4  # the sample size in bytes (float32)
-        nchannels_max = device['max_input_channels']  # the number of channels that we record
-        elementSize = nchannels_max * sampleSize
-
-        # arbitrary size to avoid overflows without using too much memory
-        ringbufferSeconds = 3.
-
-        # The number of elements in the buffer (must be a power of 2)
-        ringbufferSize = 2**int(math.log2(ringbufferSeconds * SAMPLING_RATE))
-
-        ringBuffer = rtmixer.RingBuffer(elementSize, ringbufferSize)
-
-        # action can be used to read the count of input overflows
-        action = stream.record_ringbuffer(ringBuffer)
-
-        lat_ms = 1000 * stream.latency
-        self.logger.info("Device claims %d ms latency", lat_ms)
-
-        return (stream, ringBuffer, action, nchannels_max)
+        try:
+            sampleSize = 4  # float32 bytes per physical channel
+            nchannels_max = device['max_input_channels']
+            elementSize = nchannels_max * sampleSize
+            ringbufferSeconds = 3.
+            # rtmixer requires a power-of-two element count.
+            ringbufferSize = 2**int(math.log2(ringbufferSeconds * SAMPLING_RATE))
+            ringBuffer = rtmixer.RingBuffer(elementSize, ringbufferSize)
+            action = stream.record_ringbuffer(ringBuffer)
+            self.logger.info("Device claims %d ms latency", 1000 * stream.latency)
+            return (stream, ringBuffer, action, nchannels_max)
+        except Exception:
+            self._retire_stream(stream)
+            raise
 
     def log_supported_input_formats(self, device):
         samplerates = [22050, 44100, 48000, 96000]
@@ -423,20 +445,11 @@ class __AudioBackend(QtCore.QObject):
     # (not the same as the PortAudio index, since the latter is the index
     # in the list of *all* devices, not only input ones)
     def get_readable_current_device(self):
-        return self.input_devices.index(self.device)
+        return self.input_devices.index(self.device) if self.device is not None else -1
 
     # method
     def get_readable_current_channels(self):
-        nchannels = self.device['max_input_channels']
-
-        if nchannels == 2:
-            channels = ['L', 'R']
-        else:
-            channels = []
-            for channel in range(0, nchannels):
-                channels += ["%d" % channel]
-
-        return channels
+        return [f"Channel {channel + 1}" for channel in range(self.nchannels_max)]
 
     # method
     def get_current_first_channel(self):
@@ -448,16 +461,18 @@ class __AudioBackend(QtCore.QObject):
 
     # method
     def get_current_device_nchannels(self):
-        return self.device['max_input_channels']
+        return self.nchannels_max
 
     def get_device_outputchannels_count(self, device):
         return device['max_output_channels']
 
     def fetchAudioData(self):
-        if self.action is None or self.ringBuffer is None:
+        if not self.running or self.stream is None or self.action is None or self.ringBuffer is None:
             return
 
         while self.ringBuffer.read_available >= FRAMES_PER_BUFFER:
+            configuration = self.channel_configuration
+            ringbuffer = self.ringBuffer
             read, buf1, buf2 = self.ringBuffer.get_read_buffers(FRAMES_PER_BUFFER)
             assert read == FRAMES_PER_BUFFER
 
@@ -487,18 +502,7 @@ class __AudioBackend(QtCore.QObject):
                     self.logger.warning("Ringbuffer lagging behind: ringbuffer time = %f, stream time = %f", stream_read_time, stream_time)
                     self._last_lag_warning = now
 
-            channel = self.get_current_first_channel()
-            if self.duo_input:
-                channel_2 = self.get_current_second_channel()
-
-            floatdata1 = buffer[:, channel]
-
-            if self.duo_input:
-                floatdata2 = buffer[:, channel_2]
-                floatdata = vstack((floatdata1, floatdata2))
-            else:
-                floatdata = floatdata1
-                floatdata.shape = (1, floatdata.size)
+            floatdata = buffer[:, configuration.channel_ids].T
 
             input_overflows = self.action.stats.input_overflows
             input_overflow = input_overflows > self.xruns
@@ -507,15 +511,20 @@ class __AudioBackend(QtCore.QObject):
                 self.logger.info("Stream overflow!")
                 self.underflow.emit()
 
-            self.new_data_available.emit(floatdata, stream_read_time, input_overflow)
+            self.new_data_available.emit(floatdata, stream_read_time, input_overflow, configuration.generation)
 
             self.chunk_number += 1
+            # A direct signal handler can reconfigure capture during delivery.
+            if ringbuffer is not self.ringBuffer or configuration is not self.channel_configuration or not self.running:
+                break
 
     def set_single_input(self):
         self.duo_input = False
+        self._select_legacy_channels()
 
     def set_duo_input(self):
         self.duo_input = True
+        self._select_legacy_channels()
 
     def get_stream_time(self) -> float:
         """The current stream time in seconds.
@@ -546,9 +555,13 @@ class __AudioBackend(QtCore.QObject):
     def pause(self):
         if self.stream is not None:
             self.stream.stop()
+        self.running = False
 
     def restart(self):
         if self.stream is not None:
+            pending = self.ringBuffer.read_available
+            self.ringBuffer.advance_read_index(pending)
             self.stream.start()
             self.stream_start_time = self.stream.time
             self.stream_read_index = 0
+        self.running = True

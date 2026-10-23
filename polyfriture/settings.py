@@ -26,7 +26,6 @@ from PyQt6 import QtCore, QtWidgets
 from PyQt6.QtCore import pyqtSignal  # type: ignore
 from polyfriture.audiobackend import AudioBackend
 from polyfriture.application import APPLICATION_DISPLAY_NAME
-from polyfriture.main_toolbar_view_model import MainToolbarViewModel
 from polyfriture.ui_settings import Ui_Settings_Dialog
 from polyfriture.settings_model import IntSetting, SettingsModel, ValueSetting
 from polyfriture.theme_manager import THEME_LABELS, THEME_SETTING
@@ -72,14 +71,12 @@ no_input_device_message = f"""No audio input device has been found.
 class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
     theme_preference_changed = pyqtSignal(int)
 
-    def __init__(self, parent, toolbar_view_model: MainToolbarViewModel):
+    def __init__(self, parent):
         QtWidgets.QDialog.__init__(self, parent)
         Ui_Settings_Dialog.__init__(self)
 
         self.logger = logging.getLogger(__name__)
         self.settings_model = GlobalSettings()
-
-        self._toolbar_view_model = toolbar_view_model
 
         # Setup the user interface
         self.setupUi(self)
@@ -148,11 +145,12 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
     def input_device_changed(self, index):
         if index < 0:
             return
-        self._toolbar_view_model.recording = False
-
         success, index = AudioBackend().select_input_device(index)
 
-        self.comboBox_inputDevice.setCurrentIndex(index)
+        # A failed change restores the previous choice without requesting a
+        # second device change through currentIndexChanged.
+        with QtCore.QSignalBlocker(self.comboBox_inputDevice):
+            self.comboBox_inputDevice.setCurrentIndex(index)
         self.settings_model.set("deviceName", self.comboBox_inputDevice.currentText())
 
         if not success:
@@ -177,15 +175,10 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
         second_channel = AudioBackend().get_current_second_channel()
         self.comboBox_secondChannel.setCurrentIndex(second_channel)
 
-        self._toolbar_view_model.recording = True
-
     # slot
     def first_channel_changed(self, index):
         if index < 0:
             return
-        self.settings_model.set("firstChannel", index)
-        self._toolbar_view_model.recording = False
-
         success, index = AudioBackend().select_first_channel(index)
 
         self.comboBox_firstChannel.setCurrentIndex(index)
@@ -198,15 +191,10 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
             error_message.setWindowTitle("Input device error")
             error_message.showMessage("Impossible to use the selected channel as the first channel, reverting to the previous one")
 
-        self._toolbar_view_model.recording = True
-
     # slot
     def second_channel_changed(self, index):
         if index < 0:
             return
-        self.settings_model.set("secondChannel", index)
-        self._toolbar_view_model.recording = False
-
         success, index = AudioBackend().select_second_channel(index)
 
         self.comboBox_secondChannel.setCurrentIndex(index)
@@ -218,8 +206,6 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
             error_message = QtWidgets.QErrorMessage(self)
             error_message.setWindowTitle("Input device error")
             error_message.showMessage("Impossible to use the selected channel as the second channel, reverting to the previous one")
-
-        self._toolbar_view_model.recording = True
 
     # slot
     def single_input_type_selected(self, checked):

@@ -148,6 +148,14 @@ class LongLevelWidget(QObject):
     def set_buffer(self, buffer):
         self.audiobuffer = buffer
 
+    def reset_channel_state(self, configuration):
+        self.old_index = self.audiobuffer.ringbuffer.offset
+        self.setresptime(self.response_time)
+        self.ringbuffer = RingBuffer()
+        self.level = None
+        self.level_rms = -200.
+        self._curve.setData(np.zeros(0), np.zeros(0))
+
     def handle_new_data(self, floatdata):
         # we need to maintain an index of where we are in the buffer
         index = self.audiobuffer.ringbuffer.offset

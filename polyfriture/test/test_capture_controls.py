@@ -63,6 +63,7 @@ def test_window_starts_and_capture_toggles_without_playback(app, profile, fritur
     # Keep the real window, QML, settings dialog, capture timer and dock manager;
     # substitute hardware and a fresh empty layout rather than opening devices.
     backend = Mock()
+    backend.channel_configuration = None
     backend.get_readable_devices_list.return_value = []
     monkeypatch.setattr(analyzer, "AudioBackend", lambda: backend)
     monkeypatch.setattr(settings_module, "AudioBackend", lambda: backend)

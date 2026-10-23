@@ -71,6 +71,12 @@ class SpectrogramImageData(QtCore.QObject):
 
     def erase(self):
         self.canvasscaledspectrogram.erase()
+
+    def reset(self):
+        self.erase()
+        self.last_data_time = 0.
+        self.canvasscaledspectrogram.last_write_time = 0.
+        self.data_changed.emit()
     
     def pause(self):
         self.is_playing = False

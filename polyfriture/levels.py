@@ -82,6 +82,23 @@ class Levels_Widget(QObject):
     def set_buffer(self, buffer):
         self.audiobuffer = buffer
 
+    def reset_channel_state(self, configuration):
+        self.old_rms = self.old_max = 1e-30
+        self.old_rms_2 = self.old_max_2 = 1e-30
+        self.i = 0
+        self.two_channels = configuration is not None and len(configuration.channel_ids) > 1
+        self.level_view_model.two_channels = self.two_channels
+        for level_data in (
+            self.level_view_model.level_data,
+            self.level_view_model.level_data_2,
+            self.level_view_model.level_data_slow,
+            self.level_view_model.level_data_slow_2,
+        ):
+            level_data.level_rms = -300.
+            level_data.level_max = -600.
+        self.level_view_model.level_data_ballistic.reset()
+        self.level_view_model.level_data_ballistic_2.reset()
+
     def handle_new_data(self, floatdata):
         if floatdata.shape[0] > 1 and not self.two_channels:
             self.two_channels = True

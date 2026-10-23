@@ -33,6 +33,12 @@ class Online_Linear_2D_resampler:
 
         self.resampled_data = np.zeros((self.height, 1))
 
+    def reset(self):
+        self.orig_index = 0.
+        self.resampled_index = 0.
+        self.old_data = np.zeros(self.height)
+        self.resampled_data = np.zeros((self.height, 1))
+
     def set_ratio(self, interp_factor_L, decim_factor_M):
         if self.interp_factor_L != interp_factor_L or self.decim_factor_M != decim_factor_M:
             self.interp_factor_L = interp_factor_L

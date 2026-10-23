@@ -55,6 +55,9 @@ class ImagePlot(QObject):
     def view_model(self):
         return self._spectrogram_data
 
+    def reset(self):
+        self._spectrogram_item.reset()
+
     def push(self, data, last_data_time):
         self._spectrogram_item.push(data, last_data_time)
 

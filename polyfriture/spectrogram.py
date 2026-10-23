@@ -117,6 +117,11 @@ class Spectrogram_Widget(QObject):
         self.audiobuffer = buffer
         self.old_index = self.audiobuffer.ringbuffer.offset
 
+    def reset_channel_state(self, configuration) -> None:
+        self.old_index = self.audiobuffer.ringbuffer.offset
+        self.screen_resampler.reset()
+        self.PlotZoneImage.reset()
+
     def log_spectrogram(self, sp):
         # Note: implementing the log10 of the array in Cython did not bring
         # any speedup.

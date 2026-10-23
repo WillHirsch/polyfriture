@@ -107,6 +107,12 @@ class PitchTrackerWidget(QObject):
         self.audiobuffer = buffer
         self.tracker.set_input_buffer(buffer.ringbuffer)
 
+    def reset_channel_state(self, configuration) -> None:
+        self.tracker.set_input_buffer(self.audiobuffer.ringbuffer)
+        self.tracker.reset()
+        self._curve.setData(np.zeros(0), np.zeros(0))
+        self._pitch_tracker_data.pitch = np.nan # type: ignore
+
     def handle_new_data(self, floatdata: np.ndarray) -> None:
         if self.tracker.update():
             self.update_curve()
@@ -309,6 +315,12 @@ class PitchTracker:
         self.input_buf = new_buf
         self.input_buf.grow_if_needed(self.fft_size)
         self.next_in_offset = self.input_buf.offset
+
+    def reset(self) -> None:
+        self.next_in_offset = self.input_buf.offset
+        self.prev_f0 = None
+        self.out_buf = RingBuffer()
+        self.out_offset = self.out_buf.offset
 
     def update(self) -> bool:
         new = [self.estimate_pitch(f) for f in self.new_frames()]

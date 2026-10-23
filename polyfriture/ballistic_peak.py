@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # Copyright (C) 2021 Timothée Lecomte
+# Copyright (C) 2026 Will Hirsch
 
 # This file is part of Friture.
 #
@@ -33,6 +34,12 @@ class BallisticPeak(QtCore.QObject):
         self._peak_iec = 0
         self._peak_hold_counter = 0
         self._peak_decay_factor = PEAK_DECAY_RATE
+
+    def reset(self):
+        self._peak_iec = 0.
+        self._peak_hold_counter = 0
+        self._peak_decay_factor = PEAK_DECAY_RATE
+        self.peak_changed.emit(0.)
 
     @pyqtProperty(float, notify=peak_changed)
     def peak_iec(self):

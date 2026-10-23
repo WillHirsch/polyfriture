@@ -56,6 +56,12 @@ class HistPlot_Data(Scope_Data):
         for i in range(label_count):
             self._bar_labels[i].setData(x[i], unscaled_x[i], y[i])
 
+    def clearBarLabels(self):
+        for label in self._bar_labels:
+            label.deleteLater()
+        self._bar_labels = []
+        self.bar_labels_changed.emit()
+
     @pyqtProperty(QQmlListProperty, notify=bar_labels_changed) # type: ignore
     def barLabels(self):
         return QQmlListProperty(BarLabel, self, self._bar_labels)

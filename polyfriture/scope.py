@@ -78,6 +78,18 @@ class Scope_Widget(QObject):
     def set_buffer(self, buffer):
         self.audiobuffer = buffer
 
+    def reset_channel_state(self, configuration):
+        self.time = zeros(0)
+        self.y = zeros(0)
+        self.y2 = None
+        self._curve.setData(zeros(0), zeros(0))
+        self._curve_2.setData(zeros(0), zeros(0))
+        two_channels = configuration is not None and len(configuration.channel_ids) > 1
+        if two_channels and len(self._scope_data.plot_items) == 1:
+            self._scope_data.add_plot_item(self._curve_2)
+        elif not two_channels and len(self._scope_data.plot_items) == 2:
+            self._scope_data.remove_plot_item(self._curve_2)
+
     def handle_new_data(self, floatdata):
         time = self.timerange * 1e-3
         width = int(time * SAMPLING_RATE)

@@ -37,6 +37,12 @@ class RingBuffer():
         self.offset = 0
         self.offset_time = 0
 
+    def reset(self, channels):
+        """Start a new capture generation, including same-count replacements."""
+        self.buffer = zeros((channels, 2 * self.buffer_length))
+        self.offset = 0
+        self.offset_time = 0
+
     def push(self, floatdata: ndarray, input_time: float) -> None:
         # update the circular buffer
 
@@ -44,7 +50,7 @@ class RingBuffer():
         l = floatdata.shape[1]
 
         if dim != self.buffer.shape[0]:
-            # switched from single to dual channels or vice versa
+            # The explicit configuration lifecycle also resets same-count changes.
             self.buffer = zeros((dim, 2 * self.buffer_length))
 
         self.grow_if_needed(l)

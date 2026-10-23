@@ -95,7 +95,7 @@ def test_global_dialog_recovers_invalid_theme_and_duo_but_keeps_valid_channel(
         application, profile, monkeypatch):
     audio = Audio()
     monkeypatch.setattr(settings_module, "AudioBackend", lambda: audio)
-    dialog = Settings_Dialog(None, SimpleNamespace(recording=True))
+    dialog = Settings_Dialog(None)
     try:
         profile.setValue("deviceName", "Available device")
         profile.setValue("themePreference", "unknown")
@@ -115,7 +115,7 @@ def test_global_dialog_recovers_invalid_theme_and_duo_but_keeps_valid_channel(
 
 def test_theme_buttons_use_qt_color_scheme_ids(application, monkeypatch):
     monkeypatch.setattr(settings_module, "AudioBackend", Audio)
-    dialog = Settings_Dialog(None, SimpleNamespace(recording=True))
+    dialog = Settings_Dialog(None)
     try:
         for member, button, label in (
             (Qt.ColorScheme.Unknown, dialog.radioButton_themeSystem, "System"),
@@ -155,7 +155,7 @@ def test_unavailable_audio_device_does_not_discard_saved_choices(application, pr
     profile.setValue("firstChannel", 5)
     profile.setValue("secondChannel", 9)
     profile.setValue("duoInput", -3)
-    dialog = Settings_Dialog(None, SimpleNamespace(recording=True))
+    dialog = Settings_Dialog(None)
     try:
         dialog.restoreState(profile)
         dialog.saveState(profile)

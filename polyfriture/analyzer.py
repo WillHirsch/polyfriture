@@ -162,7 +162,11 @@ class Friture(QMainWindow, ):
 
         # Initialize the audio backend
         # signal containing new data from the audio callback thread, processed as numpy array
-        AudioBackend().new_data_available.connect(self.audiobuffer.handle_new_data)
+        audio_backend = AudioBackend()
+        audio_backend.new_data_available.connect(self.audiobuffer.handle_new_data)
+        audio_backend.configuration_changed.connect(self.audiobuffer.handle_configuration_changed)
+        if audio_backend.channel_configuration is not None:
+            self.audiobuffer.handle_configuration_changed(audio_backend.channel_configuration)
 
         # this timer is used to update widgets that just need to display as fast as they can
         self.display_timer = QtCore.QTimer()
@@ -175,7 +179,7 @@ class Friture(QMainWindow, ):
         self._main_window_view_model = MainWindowViewModel(self.qml_engine)
 
         self.about_dialog = About_Dialog(self, self.slow_timer)
-        self.settings_dialog = Settings_Dialog(self, self._main_window_view_model.toolbar_view_model)
+        self.settings_dialog = Settings_Dialog(self)
 
         self.quick_view = QQuickView(self.qml_engine, None)
         self.quick_view.setResizeMode(QQuickView.ResizeMode.SizeRootObjectToView)
@@ -198,6 +202,8 @@ class Friture(QMainWindow, ):
         self.level_widget = Levels_Widget(self, self._main_window_view_model.level_view_model)
         self.level_widget.set_buffer(self.audiobuffer)
         self.audiobuffer.new_data_available.connect(self.level_widget.handle_new_data)
+        self.audiobuffer.configuration_changed.connect(self.level_widget.reset_channel_state)
+        self.level_widget.reset_channel_state(self.audiobuffer.channel_configuration)
 
         self.dockmanager = DockManager(self, self.main_tile_layout)
 
