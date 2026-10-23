@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # Copyright (C) 2009 Timothée Lecomte
+# Copyright (C) 2026 Will Hirsch
 
 # This file is part of Friture.
 #
@@ -80,6 +81,13 @@ class CanvasScaledSpectrogram(QtCore.QObject):
             self.logger.info("Spectrogram image: canvas_width changed, now: %d", int(canvas_width))
 
     def addData(self, xyzs: numpy.ndarray, last_data_time: float) -> None:
+        if xyzs.shape[1] == 0:
+            return
+        # A narrow grid cell or delayed callback can produce more columns than
+        # the raster holds. Retain the newest complete history and its cursor.
+        discarded = max(0, xyzs.shape[1] - self.canvas_width)
+        self.write_offset += discarded
+        xyzs = xyzs[:, discarded:]
         # revert the frequency axis so that the larger frequencies
         # are at the top of the widget
         xyzs = xyzs[::-1, :]

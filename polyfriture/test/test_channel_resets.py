@@ -155,23 +155,28 @@ def test_spectrogram_clears_image_clock_and_resampler_while_paused(panel_parent,
     panel = Spectrogram_Widget(panel_parent)
     attach(panel, configured_buffer)
     panel.timerangechanged(20.)
-    panel.screen_resampler.set_height(3)
-    panel.screen_resampler.push(np.ones((3, 8)))
-    panel.PlotZoneImage.push(np.full((3, 2), 0xFFFFFFFF, dtype=np.uint32), 12.)
+    previous = list(panel._channels.values())
+    for channel in previous:
+        channel.screen_resampler.set_height(3)
+        channel.screen_resampler.push(np.ones((3, 8)))
+        channel.image.push(np.full((3, 2), 0xFFFFFFFF, dtype=np.uint32), 12.)
     panel.pause()
-    image_data = panel.PlotZoneImage._spectrogram_item
-    assert image_data.canvasscaledspectrogram.write_offset
+    assert all(channel.image.canvasscaledspectrogram.write_offset for channel in previous)
 
     replace_channels(configured_buffer)
 
     assert panel.old_index == 0
-    assert panel.screen_resampler.orig_index == panel.screen_resampler.resampled_index == 0
-    assert not np.any(panel.screen_resampler.old_data)
-    assert not np.any(panel.screen_resampler.resampled_data)
-    assert image_data.canvasscaledspectrogram.write_offset == 0
-    assert image_data.last_data_time == image_data.canvasscaledspectrogram.last_write_time == 0.
-    assert image_data.pixmap().toImage().pixelColor(0, 0).name() == "#000000"
-    assert not image_data.is_playing
+    assert tuple(panel._channels) == (2, 3)
+    for channel in panel._channels.values():
+        assert channel not in previous
+        assert channel.screen_resampler.orig_index == channel.screen_resampler.resampled_index == 0
+        assert not np.any(channel.screen_resampler.old_data)
+        assert not np.any(channel.screen_resampler.resampled_data)
+        image_data = channel.image
+        assert image_data.canvasscaledspectrogram.write_offset == 0
+        assert image_data.last_data_time == image_data.canvasscaledspectrogram.last_write_time == 0.
+        assert image_data.pixmap().toImage().pixelColor(0, 0).name() == "#000000"
+        assert not image_data.is_playing
     assert panel.timerange_s == 20.
 
 

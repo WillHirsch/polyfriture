@@ -41,6 +41,9 @@ class SpectrogramImageData(QtCore.QObject):
         self.T = 1.
         self.jitter_seconds = 0.
         self.is_playing = True
+        # The panel advances this clock once for all channel images. Paints can
+        # occur at different instants without making their histories drift.
+        self.paint_time = 0.
 
     def push(self, data: numpy.ndarray, last_data_time: float) -> None:
         self.last_data_time = last_data_time
@@ -49,7 +52,9 @@ class SpectrogramImageData(QtCore.QObject):
 
         self.data_changed.emit()
     
-    def draw(self):
+    def draw(self, paint_time):
+        if self.is_playing:
+            self.paint_time = paint_time
         self.data_changed.emit()
 
     def pixmap(self):
@@ -75,6 +80,7 @@ class SpectrogramImageData(QtCore.QObject):
     def reset(self):
         self.erase()
         self.last_data_time = 0.
+        self.paint_time = 0.
         self.canvasscaledspectrogram.last_write_time = 0.
         self.data_changed.emit()
     
@@ -101,7 +107,7 @@ class SpectrogramImageData(QtCore.QObject):
         return self._screen_height
 
     def update_screen_size(self, width, height):
-        self._screen_width = int(width)
-        self._screen_height = int(height)
-        self.canvasscaledspectrogram.setcanvas_width(int(width) + self.jitter_pix())
-        self.canvasscaledspectrogram.setcanvas_height(int(height))
+        self._screen_width = max(1, int(width))
+        self._screen_height = max(1, int(height))
+        self.canvasscaledspectrogram.setcanvas_width(self._screen_width + self.jitter_pix())
+        self.canvasscaledspectrogram.setcanvas_height(self._screen_height)

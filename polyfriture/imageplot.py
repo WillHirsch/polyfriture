@@ -22,7 +22,7 @@ import logging
 from PyQt6.QtCore import QObject
 from polyfriture.spectrogram_data import Spectrogram_Data
 from polyfriture.spectrogram_item_data import SpectrogramImageData
-from polyfriture.store import GetStore
+from polyfriture.scope_data import Scope_Data
 from polyfriture.pitch_tracker import format_frequency
 
 class ImagePlot(QObject):
@@ -32,10 +32,12 @@ class ImagePlot(QObject):
 
         self.logger = logging.getLogger(__name__)
 
-        self._spectrogram_data = Spectrogram_Data(GetStore())
-
-        self._spectrogram_item = SpectrogramImageData()
-        self._spectrogram_data.add_plot_item(self._spectrogram_item)
+        self._spectrogram_data = Spectrogram_Data(self)
+        self._spectrogram_items = []
+        self._channels = []
+        self.timerange = 10.
+        self.jitter_seconds = 0.
+        self.paused = False
 
         self._spectrogram_data.show_legend = False
         self._spectrogram_data.vertical_axis.name = "Frequency (Hz)"
@@ -55,37 +57,61 @@ class ImagePlot(QObject):
     def view_model(self):
         return self._spectrogram_data
 
+    def set_channels(self, configuration):
+        channels = []
+        images = []
+        if configuration is not None:
+            for label in configuration.channel_labels:
+                channel = Scope_Data(self._spectrogram_data, axes=self._spectrogram_data)
+                channel.label = label
+                image = SpectrogramImageData()
+                image.settimerange(self.timerange)
+                image.set_jitter(self.jitter_seconds)
+                if self.paused:
+                    image.pause()
+                channel.add_plot_item(image)
+                channels.append(channel)
+                images.append(image)
+        self._spectrogram_items = images
+        previous = self._channels
+        self._channels = channels
+        self._spectrogram_data.set_channels(channels)
+        for channel in previous:
+            channel.deleteLater()
+        return images
+
     def reset(self):
-        self._spectrogram_item.reset()
+        for image in self._spectrogram_items:
+            image.reset()
 
-    def push(self, data, last_data_time):
-        self._spectrogram_item.push(data, last_data_time)
-
-    def spectrogram_screen_width(self):
-        return self._spectrogram_item.screen_width()
-
-    def spectrogram_screen_height(self):
-        return self._spectrogram_item.screen_height()
-
-    def draw(self):
-        self._spectrogram_item.draw()
+    def draw(self, paint_time):
+        for image in self._spectrogram_items:
+            image.draw(paint_time)
 
     def pause(self):
-        self._spectrogram_item.pause()
+        self.paused = True
+        for image in self._spectrogram_items:
+            image.pause()
 
     def restart(self):
-        self._spectrogram_item.restart()
+        self.paused = False
+        for image in self._spectrogram_items:
+            image.restart()
 
     def set_jitter(self, jitter_seconds: float) -> None:
-        self._spectrogram_item.set_jitter(jitter_seconds)
+        self.jitter_seconds = jitter_seconds
+        for image in self._spectrogram_items:
+            image.set_jitter(jitter_seconds)
 
     def setfreqscale(self, scale):        
         self._spectrogram_data.vertical_axis.setScale(scale)
-        self._spectrogram_item.erase()
 
     def settimerange(self, timerange_seconds, dT_seconds):
+        self.timerange = timerange_seconds
         self._spectrogram_data.horizontal_axis.setRange(0, timerange_seconds)
-        self._spectrogram_item.settimerange(timerange_seconds)
+        for image in self._spectrogram_items:
+            image.settimerange(timerange_seconds)
+            image.set_jitter(self.jitter_seconds)
 
     def setfreqrange(self, minfreq, maxfreq):
         if minfreq > maxfreq:
