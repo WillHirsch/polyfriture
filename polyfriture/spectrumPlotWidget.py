@@ -9,11 +9,9 @@ from numpy import zeros, ones, log10
 import numpy as np
 
 from polyfriture.audiobackend import SAMPLING_RATE
-from polyfriture.plotting.coordinateTransform import CoordinateTransform
 from polyfriture.spectrum_data import Spectrum_Data
 from polyfriture.filled_curve import CurveType, FilledCurve
 from polyfriture.pitch_tracker import format_frequency
-from polyfriture.store import GetStore
 
 # The peak decay rates (magic goes here :).
 PEAK_DECAY_RATE = 1.0 - 3e-6
@@ -23,28 +21,29 @@ PEAK_FALLOFF_COUNT = 32  # default : 16
 
 class SpectrumPlotWidget(QObject):
 
-    def __init__(self, parent):
+    def __init__(self, parent, *, axes=None):
         super(SpectrumPlotWidget, self).__init__(parent)
 
         self.logger = logging.getLogger(__name__)
 
-        self._spectrum_data = Spectrum_Data(GetStore())
+        self._spectrum_data = Spectrum_Data(self, axes=axes)
 
         self._curve_signal = FilledCurve(CurveType.SIGNAL)
         self._spectrum_data.add_plot_item(self._curve_signal)
 
-        self._curve_peak = FilledCurve(CurveType.PEEK)
+        self._curve_peak = FilledCurve(CurveType.PEEK, self._spectrum_data)
         self._spectrum_data.insert_plot_item(0, self._curve_peak)
 
-        self._spectrum_data.show_legend = False
-        self._spectrum_data.vertical_axis.name = "PSD (dB)"
-        self._spectrum_data.vertical_axis.setTrackerFormatter(lambda x: "%.1f dB" % (x))
-        self._spectrum_data.horizontal_axis.name = "Frequency (Hz)"
-        self._spectrum_data.horizontal_axis.setTrackerFormatter(format_frequency)
-        self._spectrum_data.horizontal_axis.show_minor_grid_lines = True
+        if axes is None:
+            self._spectrum_data.show_legend = False
+            self._spectrum_data.vertical_axis.name = "PSD (dB)"
+            self._spectrum_data.vertical_axis.setTrackerFormatter(lambda x: "%.1f dB" % (x))
+            self._spectrum_data.horizontal_axis.name = "Frequency (Hz)"
+            self._spectrum_data.horizontal_axis.setTrackerFormatter(format_frequency)
+            self._spectrum_data.horizontal_axis.show_minor_grid_lines = True
 
-        self._spectrum_data.vertical_axis.setRange(0, 1)
-        self._spectrum_data.horizontal_axis.setRange(0, 22000)
+            self._spectrum_data.vertical_axis.setRange(0, 1)
+            self._spectrum_data.horizontal_axis.setRange(0, 22000)
 
         self.paused = False
 
@@ -52,8 +51,8 @@ class SpectrumPlotWidget(QObject):
         self.peak_int = zeros((3,))
         self.peak_decay = ones((3,)) * PEAK_DECAY_RATE
 
-        self.normVerticalScaleTransform = CoordinateTransform(0, 1, 1, 0, 0)
-        self.normHorizontalScaleTransform = CoordinateTransform(0, 22000, 1, 0, 0)
+        self.normVerticalScaleTransform = self._spectrum_data.vertical_axis.coordinate_transform
+        self.normHorizontalScaleTransform = self._spectrum_data.horizontal_axis.coordinate_transform
 
     def qml_file_name(self):
         return "Spectrum.qml"

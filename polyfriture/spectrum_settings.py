@@ -141,7 +141,7 @@ class Spectrum_Settings_Dialog(QtWidgets.QDialog):
     # slot
     def freqscalechanged(self, index):
         self.logger.info("freq_scale slot %d %s", index, fscales.ALL[index].NAME)
-        self.view_model.PlotZoneSpect.setfreqscale(fscales.ALL[index])
+        self.view_model.setfreqscale(fscales.ALL[index])
 
     # slot
     def responsetimechanged(self, index):

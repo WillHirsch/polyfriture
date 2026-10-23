@@ -1,38 +1,32 @@
 import QtQuick 2.15
-import QtQuick.Window 2.2
-import QtQuick.Layouts 1.15
-import QtQuick.Shapes 1.15
 import polyfriture 1.0
 
-Plot {
+ChannelPlotGrid {
     scopedata: viewModel
+    channels: viewModel.channels
 
-    Repeater {
-        model: scopedata.plot_items
-
-        PlotFilledCurve {
-            anchors.fill: parent
-            curve: modelData
+    plotDelegate: Component {
+        Item {
+            property var channelModel: parent.channelData
+            Repeater {
+                model: parent.channelModel.plot_items
+                PlotFilledCurve {
+                    anchors.fill: parent
+                    curve: modelData
+                }
+            }
         }
     }
-
-    Column {
-        anchors.fill: parent
-        spacing: 0
-        FrequencyTracker {
-            visible: scopedata.showFrequencyTracker
-            anchors.left: parent.left
-            anchors.right: parent.right
-            fmaxValue: scopedata.fmaxValue
-            fmaxLogicalValue: scopedata.fmaxLogicalValue
-        }
-
-        FrequencyTracker {
-            visible: scopedata.showPitchTracker
-            anchors.left: parent.left
-            anchors.right: parent.right
-            fmaxValue: scopedata.fpitchDisplayText
-            fmaxLogicalValue: scopedata.fpitchValue
+    headerDelegate: Component {
+        Text {
+            property var channelModel: parent.channelData
+            text: parent.channelLabel
+                + (channelModel.showFrequencyTracker ? "    Max: " + channelModel.fmaxValue : "")
+                + (channelModel.showPitchTracker ? "    Pitch: " + channelModel.fpitchDisplayText : "")
+            color: palette.windowText
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+            SystemPalette { id: palette; colorGroup: SystemPalette.Active }
         }
     }
 }

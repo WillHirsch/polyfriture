@@ -29,8 +29,8 @@ class Spectrum_Data(Scope_Data):
     show_frequency_tracker_changed = QtCore.pyqtSignal(bool)
     show_pitch_tracker_changed = QtCore.pyqtSignal(bool)
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, parent=None, *, axes=None):
+        super().__init__(parent, axes=axes)
 
         self._fmax_value = ""
         self._fmax_logical_value = 0

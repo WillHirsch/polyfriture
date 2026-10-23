@@ -181,6 +181,8 @@ def spectrum(app):
     widget = Spectrum_Widget(parent)
     widget.setfftsize(1024)
     buffer = AudioBuffer()
+    from polyfriture.channel_configuration import ChannelConfiguration
+    buffer.handle_configuration_changed(ChannelConfiguration(0, (0, 1), 2, 1))
     widget.set_buffer(buffer)
     yield widget, buffer
     widget.settings_dialog.close()
@@ -196,16 +198,17 @@ def test_spectrum_keeps_weighted_first_channel_measurement_and_peaks(spectrum):
         np.sin(2 * np.pi * 1500 * times),
         10 * np.sin(2 * np.pi * 6000 * times),
     ])
-    buffer.handle_new_data(samples, 0.0, None)
-    with patch.object(widget.PlotZoneSpect, "setdata", wraps=widget.PlotZoneSpect.setdata) as setdata:
+    buffer.handle_new_data(samples, 0.0, None, buffer.channel_configuration.generation)
+    state = widget._channels[0]
+    with patch.object(state.plot, "setdata", wraps=state.plot.setdata) as setdata:
         widget.handle_new_data(samples)
 
     frequencies, levels, peak_frequency, _ = setdata.call_args.args
     assert peak_frequency == pytest.approx(1500, abs=SAMPLING_RATE / widget.fft_size)
-    np.testing.assert_allclose(levels, widget.log_spectrogram(widget.dispbuffer) + widget.w)
-    assert frequencies.shape == levels.shape == widget.PlotZoneSpect.peak.shape
+    np.testing.assert_allclose(levels, widget.log_spectrogram(state.dispbuffer) + widget.w)
+    assert frequencies.shape == levels.shape == state.plot.peak.shape
     assert np.isfinite(levels).all()
-    assert widget.PlotZoneSpect.view_model().vertical_axis.name == "PSD (dB A)"
+    assert state.plot.view_model().vertical_axis.name == "PSD (dB A)"
 
 
 def test_spectrum_saved_parameters_survive_restoration(spectrum, settings):
