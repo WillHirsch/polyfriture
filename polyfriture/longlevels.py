@@ -29,13 +29,11 @@ from polyfriture.longlevels_settings import (LongLevels_Settings_Dialog,
                                          DEFAULT_LEVEL_MAX,
                                          DEFAULT_MAXTIME,
                                          DEFAULT_RESPONSE_TIME)
-from polyfriture.audioproc import audioproc
 from .signal.decimate import decimate
 from .ringbuffer import RingBuffer
 from polyfriture.signal.lfilter import lfilter_float64_1D
 from polyfriture.scope_data import Scope_Data
 from polyfriture.curve import Curve
-from polyfriture.store import GetStore
 
 from polyfriture.audiobackend import SAMPLING_RATE
 
@@ -92,160 +90,141 @@ class Subsampler:
         return x_dec
 
 
-class LongLevelWidget(QObject):
+class LongLevelChannel(Scope_Data):
+    """Independent filter memory and level history for one capture row."""
 
+    def __init__(self, parent, axes, label, decimations, filter_length):
+        super().__init__(parent, axes=axes)
+        self.label = label
+        self.curve = Curve()
+        self.curve.name = label
+        self.curve.setData(np.zeros(0), np.zeros(0))
+        self.add_plot_item(self.curve)
+        self.subsampler = Subsampler(decimations)
+        self.zf = np.zeros(filter_length - 1)
+        self.ringbuffer = RingBuffer()
+        self.level_rms = -200.
+
+    def process(self, samples, numerator, denominator):
+        squared = self.subsampler.push(samples ** 2)
+        levels, self.zf = lfilter_float64_1D(numerator, denominator, squared, self.zf)
+        levels_db = 10. * np.log10(np.maximum(levels, 1e-150))
+        self.level_rms = float(levels_db[-1])
+        self.ringbuffer.push(levels_db.reshape(1, -1), 0.)
+
+
+class LongLevelWidget(QObject):
     def __init__(self, parent):
         super().__init__(parent)
-
         self.logger = logging.getLogger(__name__)
-
-        self._long_levels_data = Scope_Data(GetStore())
-
-        self._curve = Curve()
-        self._curve.name = "Ch1"
-        self._long_levels_data.add_plot_item(self._curve)
-
+        self._long_levels_data = Scope_Data(self)
         self._long_levels_data.vertical_axis.name = "Level (dB FS RMS)"
-        self._long_levels_data.vertical_axis.setTrackerFormatter(lambda x: "%#.3g dB" % (x))
+        self._long_levels_data.vertical_axis.setTrackerFormatter(lambda x: "%#.3g dB" % x)
         self._long_levels_data.horizontal_axis.name = "Time (sec)"
-        self._long_levels_data.horizontal_axis.setTrackerFormatter(lambda x: "%#.3g sec" % (x))
-
+        self._long_levels_data.horizontal_axis.setTrackerFormatter(lambda x: "%#.3g sec" % x)
         self.level_min = DEFAULT_LEVEL_MIN
         self.level_max = DEFAULT_LEVEL_MAX
         self._long_levels_data.vertical_axis.setRange(self.level_min, self.level_max)
-
         self.audiobuffer = None
-
-        # initialize the settings dialog
-        self.settings_dialog = LongLevels_Settings_Dialog(parent, self)
-
-        # initialize the class instance that will do the fft
-        self.proc = audioproc()
-
-        self.level = None  # 1e-30
-        self.level_rms = -200.
-
-        self.two_channels = False
-
-        self.i = 0
-
+        self._channels = {}
         self.old_index = 0
-
-        #Set the initial timespan and response time
         self.length_seconds = DEFAULT_MAXTIME
         self.setresptime(DEFAULT_RESPONSE_TIME)
-
-        # ringbuffer for the subsampled data
-        self.ringbuffer = RingBuffer()
+        self.settings_dialog = LongLevels_Settings_Dialog(parent, self)
 
     def qml_file_name(self):
-        return "Scope.qml"
-    
+        return "LongLevels.qml"
+
     def view_model(self):
         return self._long_levels_data
 
-    # method
     def set_buffer(self, buffer):
         self.audiobuffer = buffer
+        self.reset_channel_state(buffer.channel_configuration)
 
     def reset_channel_state(self, configuration):
-        self.old_index = self.audiobuffer.ringbuffer.offset
-        self.setresptime(self.response_time)
-        self.ringbuffer = RingBuffer()
-        self.level = None
-        self.level_rms = -200.
-        self._curve.setData(np.zeros(0), np.zeros(0))
+        previous = self._channels
+        self._channels = {}
+        if configuration is not None:
+            for channel_id, label in zip(configuration.channel_ids, configuration.channel_labels):
+                self._channels[channel_id] = LongLevelChannel(
+                    self, self._long_levels_data, label, self.Ndec, len(self.b))
+        self.old_index = self.audiobuffer.ringbuffer.offset if self.audiobuffer is not None else 0
+        self._long_levels_data.set_channels(self._channels.values())
+        for channel in previous.values():
+            channel.deleteLater()
 
     def handle_new_data(self, floatdata):
-        # we need to maintain an index of where we are in the buffer
+        if self.audiobuffer is None or not self._channels:
+            return
         index = self.audiobuffer.ringbuffer.offset
-        self.last_data_time = self.audiobuffer.lastDataTime
-
         available = index - self.old_index
-
         if available < 0:
-            # ringbuffer must have grown or something...
-            available = 0
-            self.old_index = index
+            self.reset_channel_state(self.audiobuffer.channel_configuration)
+            return
+        needed = 2 ** self.Ndec
+        realizable = available // needed
+        for _ in range(realizable):
+            # Keep the existing history alignment for every capture row.
+            end = self.old_index + needed
+            samples = self.audiobuffer.data_indexed(self.old_index, needed)
+            for row, channel in enumerate(self._channels.values()):
+                channel.process(samples[row], self.b, self.a)
+            self.old_index = end
+        if realizable:
+            self.update_curves()
 
-        # if we have enough data to add a frequency column in the time-frequency plane, compute it
-        needed = int(2**self.Ndec)
-        realizable = int(np.floor(available / needed))
+    def update_curves(self):
+        time = np.arange(self.length_samples) / self.subsampled_sampling_rate
+        scaled_t = time / self.length_seconds
+        for channel in self._channels.values():
+            if not channel.ringbuffer.offset:
+                continue
+            levels = channel.ringbuffer.data(self.length_samples)[0]
+            scaled_y = np.clip(1. - (levels - self.level_min) /
+                               (self.level_max - self.level_min), 0., 1.)
+            channel.curve.setData(scaled_t, scaled_y)
 
-        if realizable > 0:
-            for i in range(realizable):
-                floatdata = self.audiobuffer.data_indexed(self.old_index, needed)
-
-                # first channel
-                y0 = floatdata[0, :]
-
-                y0_squared = y0**2
-
-                # subsample
-                y0_squared_dec = self.subsampler.push(y0_squared)
-
-                self.level, self.zf = lfilter_float64_1D(self.b, self.a, y0_squared_dec, self.zf)
-
-                self.level_rms = 10. * np.log10(max(self.level, 1e-150))
-
-                l = np.array([self.level_rms])
-                l.shape = (1, 1)
-
-                self.ringbuffer.push(l, 0)
-
-                self.old_index += needed
-
-            self.time = np.arange(self.length_samples) / self.subsampled_sampling_rate
-
-            levels = self.ringbuffer.data(self.length_samples)
-
-            scaled_t = self.time / self.length_seconds
-            scaled_y = np.clip(1. - (levels[0, :] - self.level_min) / (self.level_max - self.level_min), 0., 1.)
-            self._curve.setData(scaled_t, scaled_y)
-
-    # method
     def canvasUpdate(self):
-        # nothing to do here
-        return
+        pass
 
     def setmin(self, value):
         self.level_min = value
         self._long_levels_data.vertical_axis.setRange(self.level_min, self.level_max)
-        
+        self.update_curves()
+
     def setmax(self, value):
         self.level_max = value
         self._long_levels_data.vertical_axis.setRange(self.level_min, self.level_max)
+        self.update_curves()
 
     def setduration(self, value):
         self.length_seconds = value
         self.length_samples = int(self.length_seconds * self.subsampled_sampling_rate)
         self._long_levels_data.horizontal_axis.setRange(0., self.length_seconds)
+        self.update_curves()
 
     def setresptime(self, value):
         self.response_time = value
-        # how many times we should decimate to end up with 100 points in the kernel
-        self.Ndec = int(max(0, np.floor((np.log2(self.response_time * SAMPLING_RATE/100.)))))
-
-        Ngauss = 4
-        self.b = np.array(gauss(10*Ngauss+1, 2.*Ngauss))
+        self.Ndec = int(max(0, np.floor(np.log2(self.response_time * SAMPLING_RATE / 100.))))
+        self.b = np.array(gauss(41, 8.))
         self.a = np.zeros(self.b.shape)
         self.a[0] = 1.
-        self.zf = np.zeros(max(len(self.b), len(self.a)) - 1)
+        self.subsampled_sampling_rate = SAMPLING_RATE / 2 ** self.Ndec
+        # A different sample interval cannot share the old history or filter tail.
+        configuration = self.audiobuffer.channel_configuration if self.audiobuffer is not None else None
+        self.reset_channel_state(configuration)
+        self.setduration(self.length_seconds)
 
-        self.subsampled_sampling_rate = SAMPLING_RATE / 2 ** (self.Ndec)
-        self.subsampler = Subsampler(self.Ndec)
-
-        if self.length_seconds: 
-            self.setduration(self.length_seconds)
-
-    # slot
     def settings_called(self, checked):
         self.settings_dialog.show()
 
-    # method
     def saveState(self, settings):
         self.settings_dialog.saveState(settings)
 
-    # method
     def restoreState(self, settings):
         self.settings_dialog.restoreState(settings)
+
+    def cleanup(self):
+        self._long_levels_data.set_channels([])
+        self.settings_dialog.deleteLater()
