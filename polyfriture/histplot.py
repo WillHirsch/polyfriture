@@ -75,6 +75,15 @@ class HistPlot(QObject):
     def view_model(self):
         return self._histplot_data
 
+    def reset(self):
+        self.peak = zeros(0)
+        self.peak_int = zeros(0)
+        self.peak_decay = zeros(0)
+        empty = zeros(0)
+        self._curve_signal.setData(empty, empty, empty, empty, 1.)
+        self._curve_peak.setData(empty, empty, empty, empty, 1.)
+        self._histplot_data.clearBarLabels()
+
     def setdata(self, fl, fh, fc, y):
         if not self.paused:
             M = numpy.max(y)

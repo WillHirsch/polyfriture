@@ -179,6 +179,10 @@ class Generator_Widget(QObject):
     def set_buffer(self, buffer):
         self.audiobuffer = buffer
 
+    def reset_channel_state(self, configuration):
+        # Input changes do not affect the independently generated output.
+        pass
+
     # slot
     def start_stop_button_toggle(self):
         if self._view_model.isPlaying:

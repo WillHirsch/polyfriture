@@ -119,6 +119,7 @@ class Dock(QObject):
         self.dockmanager.close_dock(self)
 
     def cleanup(self):
+        self.disconnect_audio_widget()
         if self.dock_qml is not None:
             self.dock_qml.setParentItem(None) # type: ignore
             self.dock_qml.deleteLater()
@@ -134,6 +135,11 @@ class Dock(QObject):
                 self.audiowidget.cleanup()
             self.audiowidget.deleteLater()
             self.audiowidget = None
+
+    def disconnect_audio_widget(self):
+        if self.audiowidget is not None:
+            self.audiobuffer.new_data_available.disconnect(self.audiowidget.handle_new_data)
+            self.audiobuffer.configuration_changed.disconnect(self.audiowidget.reset_channel_state)
 
     def movePrevious(self):
         self.dockmanager.movePrevious(self)
@@ -161,6 +167,7 @@ class Dock(QObject):
             self.audio_widget_qml = None
 
         if self.audiowidget is not None:
+            self.disconnect_audio_widget()
             settings = temporary_settings()
             self.audiowidget.saveState(settings) # type: ignore
             assert self.widgetId is not None
@@ -186,9 +193,12 @@ class Dock(QObject):
         self.audiowidget.set_buffer(self.audiobuffer) # type: ignore
         self.audiobuffer.new_data_available.connect(
             self.audiowidget.handle_new_data) # type: ignore
+        self.audiobuffer.configuration_changed.connect(
+            self.audiowidget.reset_channel_state) # type: ignore
         if widgetId in self.dockmanager.last_settings:
             self.audiowidget.restoreState( # type: ignore
                 self.dockmanager.last_settings[widgetId])
+        self.audiowidget.reset_channel_state(self.audiobuffer.channel_configuration) # type: ignore
 
         component = QQmlComponent(self.qml_engine)
         component.loadUrl(qml_url(self.audiowidget.qml_file_name())) # type: ignore

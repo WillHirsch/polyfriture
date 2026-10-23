@@ -75,6 +75,11 @@ class OctaveSpectrum_Widget(QObject):
     def set_buffer(self, buffer):
         self.audiobuffer = buffer
 
+    def reset_channel_state(self, configuration):
+        self.filters.reset()
+        self.dispbuffers = [0] * self.filters.nbands
+        self.PlotZoneSpect.reset()
+
     def compute_kernels(self, alphas, Ns):
         kernels = []
         for alpha, N in zip(alphas, Ns):

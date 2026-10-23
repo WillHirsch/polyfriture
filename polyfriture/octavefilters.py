@@ -63,6 +63,10 @@ class Octave_Filters():
 
         return decs
 
+    def reset(self):
+        for overlap in self._overlaps_oct + self._overlaps_dec:
+            overlap.fill(0.)
+
     def setbandsperoctave(self, bandsperoctave):
         self.bandsperoctave = bandsperoctave
         self.nbands = NOCTAVE * self.bandsperoctave
