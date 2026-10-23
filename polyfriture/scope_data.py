@@ -57,6 +57,17 @@ class Scope_Data(QtCore.QObject):
         self._plot_items.remove(plot_item)
         self.plot_items_changed.emit()
 
+    def set_plot_items(self, plot_items):
+        """Publish a complete curve selection before disposing removed items."""
+        previous = self._plot_items
+        self._plot_items = list(plot_items)
+        for plot_item in self._plot_items:
+            plot_item.setParent(self)
+        self.plot_items_changed.emit()
+        for plot_item in previous:
+            if plot_item not in self._plot_items:
+                plot_item.deleteLater()
+
     @pyqtProperty(QObject, constant=True) # type: ignore
     def horizontal_axis(self):
         return self._horizontal_axis

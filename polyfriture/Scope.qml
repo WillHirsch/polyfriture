@@ -13,7 +13,7 @@ Plot {
 
         PlotCurve {
             anchors.fill: parent
-            color: PlotItemColors.color(index)
+            color: modelData.color || PlotItemColors.color(index)
             curve: modelData
         }
     }
