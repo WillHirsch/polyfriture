@@ -19,6 +19,9 @@ Rectangle {
     property bool showHorizontalAxis: true
     property bool showPlotArea: true
     property int configuredColumns: Store.channel_grid_columns
+    // Transpose the occupied cells, not the component: headers and shared
+    // boundary axes retain their normal orientation and equal gutters.
+    property bool transposed: false
     property real headerHeight: fontMetrics.height + 4
     property real columnSpacing: 8
     property real rowSpacing: fontMetrics.height / 2 + 4
@@ -32,9 +35,11 @@ Rectangle {
     }
 
     readonly property int channelCount: channels.length
-    readonly property int columnCount: Math.min(channelCount, Math.max(1, configuredColumns))
-    readonly property int rowCount: columnCount ? Math.ceil(channelCount / columnCount) : 0
-    readonly property var placements: ChannelGridLayout.placements(channelCount, configuredColumns)
+    readonly property int regularColumnCount: Math.min(channelCount, Math.max(1, configuredColumns))
+    readonly property int regularRowCount: regularColumnCount ? Math.ceil(channelCount / regularColumnCount) : 0
+    readonly property int columnCount: transposed ? regularRowCount : regularColumnCount
+    readonly property int rowCount: transposed ? regularColumnCount : regularRowCount
+    readonly property var placements: ChannelGridLayout.placements(channelCount, configuredColumns, transposed)
     readonly property bool hasColorAxis: channelCount > 0 && scopedata.show_color_axis
 
     // Measure shared gutters once. Their size cannot depend on a particular

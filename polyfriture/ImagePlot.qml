@@ -8,11 +8,13 @@ ChannelPlotGrid {
     objectName: "spectrogram-channel-grid"
     scopedata: viewModel
     channels: viewModel.channels
+    transposed: viewModel.rotated
     plotDelegate: Component {
         SpectrogramItem {
             anchors.fill: parent
             objectName: "spectrogram-channel-image-" + parent.channelIndex
             curve: parent.channelData.plot_items[0]
+            rotated: viewModel.rotated
         }
     }
 }

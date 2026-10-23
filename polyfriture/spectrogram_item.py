@@ -25,12 +25,14 @@ from polyfriture.spectrogram_item_data import SpectrogramImageData
 
 class SpectrogramItem(QQuickPaintedItem):
     curveChanged = pyqtSignal()
+    rotatedChanged = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAntialiasing(True)
 
         self._curve = None
+        self._rotated = False
         self.widthChanged.connect(self.updateScreenSize)
         self.heightChanged.connect(self.updateScreenSize)
 
@@ -51,15 +53,41 @@ class SpectrogramItem(QQuickPaintedItem):
             if self.window():
                 self.window().update()
 
+    @pyqtProperty(bool, notify=rotatedChanged)
+    def rotated(self) -> bool:
+        return self._rotated
+
+    @rotated.setter
+    def rotated(self, rotated: bool) -> None:
+        if self._rotated != rotated:
+            self._rotated = rotated
+            self.updateScreenSize()
+            self.rotatedChanged.emit()
+            self.update()
+
     def updateScreenSize(self) -> None:
         if self._curve is not None:
-            self._curve.update_screen_size(self.width(), self.height())
+            # Processing and the rolling cache always use time horizontally
+            # and frequency vertically. Only their physical display is rotated.
+            if self._rotated:
+                self._curve.update_screen_size(self.height(), self.width())
+            else:
+                self._curve.update_screen_size(self.width(), self.height())
 
     def paint(self, painter: QPainter | None) -> None:  # type: ignore
         if self._curve is None or painter is None:
             return
         pixmap_source_rect = self._curve.pixmap_source_rect(self._curve.paint_time)
-        painter.drawPixmap(
-            QRectF(0, 0, self.width(), self.height()),
-            self._curve.pixmap(),
-            pixmap_source_rect)
+        painter.save()
+        try:
+            if self._rotated:
+                # Clockwise: high frequency moves from top to right, and the
+                # newest time column moves from right to bottom.
+                painter.translate(self.width(), 0)
+                painter.rotate(90)
+                target = QRectF(0, 0, self.height(), self.width())
+            else:
+                target = QRectF(0, 0, self.width(), self.height())
+            painter.drawPixmap(target, self._curve.pixmap(), pixmap_source_rect)
+        finally:
+            painter.restore()

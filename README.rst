@@ -10,6 +10,10 @@ Its goal is to more effectively support monitoring multiple channels from one au
 
 Polyfriture displays audio data in several widgets, such as a scope, a spectrum analyzer, or a rolling 2D spectrogram.
 
+Spectrogram settings offer a clockwise 90-degree rotation, with frequency increasing
+rightward and newest audio at the bottom. The channel grid is transposed while
+labels remain upright; the global grid column count becomes the rotated row count.
+
 This program can be useful to analyze and equalize the audio response of a hall, or for educational purposes, etc.
 
 Friture was created by Timothée Lecomte and contributors.

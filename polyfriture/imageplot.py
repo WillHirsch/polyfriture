@@ -24,6 +24,7 @@ from polyfriture.spectrogram_data import Spectrogram_Data
 from polyfriture.spectrogram_item_data import SpectrogramImageData
 from polyfriture.scope_data import Scope_Data
 from polyfriture.pitch_tracker import format_frequency
+import polyfriture.plotting.frequency_scales as fscales
 
 class ImagePlot(QObject):
 
@@ -38,16 +39,13 @@ class ImagePlot(QObject):
         self.timerange = 10.
         self.jitter_seconds = 0.
         self.paused = False
+        self.frequency_range = (20, 20000)
+        self.frequency_scale = fscales.Linear
 
         self._spectrogram_data.show_legend = False
-        self._spectrogram_data.vertical_axis.name = "Frequency (Hz)"
-        self._spectrogram_data.vertical_axis.setTrackerFormatter(format_frequency)
-        self._spectrogram_data.horizontal_axis.name = "Time (s)"
-        self._spectrogram_data.horizontal_axis.setTrackerFormatter(lambda x: "%.2f s" % (x))
         self._spectrogram_data.color_axis.name = "PSD (dB A)"
 
-        self._spectrogram_data.vertical_axis.setRange(20, 20000)
-        self._spectrogram_data.horizontal_axis.setRange(0, 10)
+        self._update_axes()
         self._spectrogram_data.color_axis.setRange(-140, 0)
         self._spectrogram_data.show_color_axis = True
 
@@ -104,11 +102,36 @@ class ImagePlot(QObject):
             image.set_jitter(jitter_seconds)
 
     def setfreqscale(self, scale):        
-        self._spectrogram_data.vertical_axis.setScale(scale)
+        self.frequency_scale = scale
+        self._update_axes()
+
+    def setrotated(self, rotated):
+        if rotated != self._spectrogram_data.rotated:
+            self._update_axes(rotated)
+            self._spectrogram_data.rotated = rotated
+
+    def _update_axes(self, rotated=None):
+        # Retain logical frequency/time parameters independently of their
+        # current physical axis. Both scales and tracker transforms follow the
+        # clockwise image rotation; the vertical time range runs downward.
+        if rotated is None:
+            rotated = self._spectrogram_data.rotated
+        horizontal = self._spectrogram_data.horizontal_axis
+        vertical = self._spectrogram_data.vertical_axis
+        frequency_axis, time_axis = (horizontal, vertical) if rotated else (vertical, horizontal)
+        frequency_axis.name = "Frequency (Hz)"
+        frequency_axis.setTrackerFormatter(format_frequency)
+        frequency_axis.setScale(self.frequency_scale)
+        frequency_axis.setRange(*self.frequency_range)
+        time_axis.name = "Time (s)"
+        time_axis.setTrackerFormatter(lambda x: "%.2f s" % x)
+        time_axis.setScale(fscales.Linear)
+        time_range = (self.timerange, 0.) if rotated else (0., self.timerange)
+        time_axis.setRange(*time_range)
 
     def settimerange(self, timerange_seconds, dT_seconds):
         self.timerange = timerange_seconds
-        self._spectrogram_data.horizontal_axis.setRange(0, timerange_seconds)
+        self._update_axes()
         for image in self._spectrogram_items:
             image.settimerange(timerange_seconds)
             image.set_jitter(self.jitter_seconds)
@@ -117,7 +140,8 @@ class ImagePlot(QObject):
         if minfreq > maxfreq:
             minfreq, maxfreq = maxfreq, minfreq
 
-        self._spectrogram_data.vertical_axis.setRange(minfreq, maxfreq)
+        self.frequency_range = (minfreq, maxfreq)
+        self._update_axes()
 
     def setspecrange(self, spec_min, spec_max):
         if spec_min > spec_max:
