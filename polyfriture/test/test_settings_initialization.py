@@ -172,6 +172,10 @@ def test_import_preserves_nested_values_and_leaves_source_unchanged(stores):
     initialize_settings(fork, friture_source)
 
     expected = {**before, "Docks/dockNames": ["Meters", "Dock 2", "Dock 7"], "Docks/Meters/type": 9}
+    for key in ("AudioBackend/firstChannel", "AudioBackend/secondChannel", "AudioBackend/duoInput"):
+        del expected[key]
+        assert not fork.contains(key)
+    expected["AudioBackend/selectedChannels"] = [3, 7]
     for key, value in expected.items():
         assert fork.value(key) == value
     assert isinstance(fork.value("MainWindow/windowGeometry"), QByteArray)
@@ -343,7 +347,8 @@ def test_retired_features_are_cleaned_for_imported_and_existing_profiles(stores,
     assert not fork.contains("AudioBackend/historyLength")
     assert not any(key.startswith(("Docks/Delay/", "Docks/lastSettings/6/"))
                    for key in fork.allKeys())
-    assert fork.value("AudioBackend/firstChannel") == 3
+    assert fork.value("AudioBackend/selectedChannels") == [3]
+    assert not fork.contains("AudioBackend/firstChannel")
     assert fork.value("Docks/Spectrum/fftSize") == 9
     assert fork.value("Docks/Pitch/type") == 8
     assert fork.value("Docks/lastSettings/2/fftSize") == 9
@@ -413,12 +418,68 @@ def test_meter_panel_upgrade_runs_once_for_imported_and_existing_layouts(stores,
     assert fork.value("Docks/dockNames") == ["Scope", "Spectrum"]
 
 
+@pytest.mark.parametrize("existing_version", [None, 0, 1, 2, 3])
+def test_channel_selection_and_device_identity_upgrade_imported_and_existing_profiles(stores, existing_version):
+    fork, source = stores
+    values = {"AudioBackend/deviceName": "USB interface (16 channels) (Test API)  (default)",
+              "AudioBackend/firstChannel": "7", "AudioBackend/secondChannel": 3,
+              "AudioBackend/duoInput": "-3", "AudioBackend/channelGridColumns": 4,
+              "Docks/dockNames": [], "extension/value": QByteArray(b"retained")}
+    if existing_version is None:
+        write_values(source, values)
+    else:
+        write_values(fork, {**values, SCHEMA_VERSION_KEY: existing_version,
+                            FRITURE_IMPORT_STATE_KEY: "existing"})
+    source_before = snapshot(source)
+    source_bytes = Path(source.fileName()).read_bytes() if source.allKeys() else None
+
+    initialize_settings(fork, source)
+
+    assert fork.value("AudioBackend/deviceName") == "USB interface"
+    assert fork.value("AudioBackend/deviceHostApi") == "Test API"
+    assert fork.value("AudioBackend/selectedChannels") == ["7", 3]
+    for name in ("firstChannel", "secondChannel", "duoInput"):
+        assert not fork.contains("AudioBackend/" + name)
+    owner = GlobalSettings()
+    fork.beginGroup("AudioBackend")
+    try:
+        owner.restore(fork)
+    finally:
+        fork.endGroup()
+    assert owner.get("selectedChannels") == [3, 7]
+    assert owner.get("channelGridColumns") == 4
+    assert owner.get("deviceName") == "USB interface"
+    assert owner.get("deviceHostApi") == "Test API"
+    assert fork.value("extension/value") == QByteArray(b"retained")
+    # An explicitly empty version-three layout reflects meters already closed.
+    assert fork.value("Docks/dockNames") == ([] if existing_version == 3 else ["Meters"])
+    assert_complete(fork, "imported" if existing_version is None else "existing")
+    initialized = snapshot(fork)
+    initialize_settings(fork, source)
+    assert snapshot(fork) == initialized
+    assert snapshot(source) == source_before
+    if source_bytes is not None:
+        assert Path(source.fileName()).read_bytes() == source_bytes
+
+
 @pytest.mark.parametrize("owner_type,group,values,recovered,preserved", [
     (ThemeSettings, "", {"themePreference": "invalid"},
      ["themePreference"], {}),
     (GlobalSettings, "AudioBackend", {"AudioBackend/themePreference": 99,
                                       "AudioBackend/firstChannel": 7},
-     ["themePreference"], {"firstChannel": 7, "deviceName": "Retained input"}),
+     ["themePreference"], {"selectedChannels": [7], "deviceName": "Retained input"}),
+    (GlobalSettings, "AudioBackend", {"AudioBackend/themePreference": 2,
+                                      "AudioBackend/firstChannel": -1,
+                                      "AudioBackend/secondChannel": 4,
+                                      "AudioBackend/duoInput": -3},
+     ["selectedChannels"], {"themePreference": 2, "deviceName": "Retained input"}),
+    (GlobalSettings, "AudioBackend", {"AudioBackend/themePreference": 2,
+                                      "AudioBackend/selectedChannels": None,
+                                      "AudioBackend/firstChannel": 7},
+     ["selectedChannels"], {"themePreference": 2, "deviceName": "Retained input"}),
+    (GlobalSettings, "AudioBackend", {"AudioBackend/themePreference": 2,
+                                      "AudioBackend/selectedChannels": [7, 3, 7]},
+     [], {"selectedChannels": [3, 7], "themePreference": 2}),
     (SpectrumSettings, "Docks/central", {"CentralWidget/type": 2,
                                         "CentralWidget/fftSize": "invalid",
                                         "CentralWidget/freqMin": 123},
@@ -484,7 +545,11 @@ def test_failed_flush_resumes_original_snapshot_before_reading_changed_friture_p
     fork = ini_settings(fork_path, FailCheckpointOnce)
     fork.failure_phase = phase
     friture_source = ini_settings(tmp_path / "friture.ini")
-    write_values(friture_source, {"AudioBackend/deviceName": "Original input", "themePreference": 1})
+    write_values(friture_source, {
+        "AudioBackend/deviceName": "Original input (8 channels) (Test API) ",
+        "AudioBackend/firstChannel": 7, "AudioBackend/secondChannel": 3,
+        "AudioBackend/duoInput": -3, "themePreference": 1,
+    })
 
     with pytest.raises(SettingsInitializationError):
         initialize_settings(fork, friture_source)
@@ -503,6 +568,10 @@ def test_failed_flush_resumes_original_snapshot_before_reading_changed_friture_p
     initialize_settings(resumed, unreadable)
 
     assert resumed.value("AudioBackend/deviceName") == "Original input"
+    assert resumed.value("AudioBackend/deviceHostApi") == "Test API"
+    assert resumed.value("AudioBackend/selectedChannels") == [7, 3]
+    for name in ("firstChannel", "secondChannel", "duoInput"):
+        assert not resumed.contains("AudioBackend/" + name)
     assert resumed.value("themePreference", type=int) == 1
     assert_complete(resumed, "imported")
     assert friture_source.value("AudioBackend/deviceName") == "Changed input"
@@ -647,7 +716,10 @@ def test_native_stores_import_qt_values_without_touching_application_namespaces(
             "MainWindow/windowGeometry": QByteArray(b"\x00\xfe\xff"),
             "Docks/dockNames": ["Dock 1"],
             "Docks/Dock 1/type": 1,
+            "AudioBackend/deviceName": "Native input (8 channels) (Test API) ",
             "AudioBackend/firstChannel": 4,
+            "AudioBackend/secondChannel": 1,
+            "AudioBackend/duoInput": -3,
         })
         before = snapshot(friture_source)
 
@@ -655,7 +727,18 @@ def test_native_stores_import_qt_values_without_touching_application_namespaces(
 
         assert fork.value("MainWindow/windowGeometry") == QByteArray(b"\x00\xfe\xff")
         assert fork.value("Docks/dockNames") == ["Meters", "Dock 1"]
-        assert fork.value("AudioBackend/firstChannel", type=int) == 4
+        assert fork.value("AudioBackend/deviceName") == "Native input"
+        assert fork.value("AudioBackend/deviceHostApi") == "Test API"
+        # Native stores may reload integer lists as strings (REG_MULTI_SZ on
+        # Windows); normal owner restoration handles either representation.
+        owner = GlobalSettings()
+        fork.beginGroup("AudioBackend")
+        try:
+            owner.restore(fork)
+        finally:
+            fork.endGroup()
+        assert owner.get("selectedChannels") == [1, 4]
+        assert not fork.contains("AudioBackend/firstChannel")
         assert snapshot(friture_source) == before
         assert_complete(fork, "imported")
     assert_native_stores_removed(paths)
@@ -716,8 +799,10 @@ def test_windows_import_falls_back_to_store_and_never_reimports(stores, monkeypa
     initialize_settings(fork)
 
     for key, value in values.items():
-        if key not in (SCHEMA_VERSION_KEY, "Docks/dockNames"):
+        if key not in (SCHEMA_VERSION_KEY, "Docks/dockNames", "AudioBackend/firstChannel"):
             assert fork.value(key) == value
+    assert fork.value("AudioBackend/selectedChannels") == [4]
+    assert not fork.contains("AudioBackend/firstChannel")
     assert fork.value("Docks/dockNames") == ["Meters", "Dock 1"]
     assert fork.value("Docks/Meters/type") == 9
     assert_complete(fork, "imported")
@@ -835,3 +920,28 @@ def test_existing_journal_keeps_its_persisted_format(stores, monkeypatch):
     assert fork.value("Polyfriture/schemaVersion", type=int) == settings_schema.CURRENT_VERSION
     assert fork.value("Polyfriture/upstreamImport") == "imported"
     assert not fork.contains("Polyfriture/pendingMigration")
+
+
+def test_version_three_journal_finishes_before_channel_selection_upgrade(stores, tmp_path):
+    fork, _ = stores
+    write_values(fork, {
+        SCHEMA_VERSION_KEY: 2,
+        INITIALIZATION_JOURNAL_KEY: {
+            "values": {"AudioBackend/deviceName": "Prepared input (8 channels) (Test API) ",
+                       "AudioBackend/firstChannel": 4, "AudioBackend/secondChannel": 1,
+                       "AudioBackend/duoInput": -3, "Docks/dockNames": []},
+            "remove": [], "schemaVersion": 3, "upstreamImport": "imported",
+        },
+    })
+    unreadable = ini_settings(tmp_path / "unreadable.ini", UnreadableFritureSource)
+
+    initialize_settings(fork, unreadable)
+
+    assert fork.value("AudioBackend/deviceName") == "Prepared input"
+    assert fork.value("AudioBackend/deviceHostApi") == "Test API"
+    assert fork.value("AudioBackend/selectedChannels") == [4, 1]
+    assert fork.value("Docks/dockNames") == []
+    assert not fork.contains("Docks/Meters/type")
+    for name in ("firstChannel", "secondChannel", "duoInput"):
+        assert not fork.contains("AudioBackend/" + name)
+    assert_complete(fork, "imported")

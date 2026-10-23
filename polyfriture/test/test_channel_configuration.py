@@ -7,6 +7,7 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 from PyQt6 import sip
+from PyQt6.QtCore import QSettings, Qt
 
 from polyfriture import audiobackend, settings as settings_module
 from polyfriture.channel_configuration import ChannelConfiguration
@@ -70,11 +71,11 @@ class SyntheticStream:
 @pytest.fixture
 def capture(monkeypatch):
     devices = [
-        {"name": "Eight inputs", "index": 3, "max_input_channels": 8},
-        {"name": "Four inputs", "index": 8, "max_input_channels": 4},
+        {"name": "Eight inputs", "index": 3, "max_input_channels": 8, "hostapi": 0},
+        {"name": "Four inputs", "index": 8, "max_input_channels": 4, "hostapi": 1},
     ]
     factory = SimpleNamespace(streams=[], rings=[], fail_open=False, fail_start=False,
-                              fail_stop=False, fail_close=False)
+                              fail_stop=False, fail_close=False, pending_samples=None)
     backend_type = getattr(audiobackend, "__AudioBackend")
     monkeypatch.setattr(backend_type, "get_input_devices", lambda self: devices)
     monkeypatch.setattr(backend_type, "get_output_devices", lambda self: [])
@@ -86,6 +87,8 @@ def capture(monkeypatch):
         stream.fail_stop = factory.fail_stop
         stream.fail_close = factory.fail_close
         ring = SyntheticCaptureRing(device["max_input_channels"])
+        if factory.pending_samples is not None:
+            ring.load(factory.pending_samples)
         factory.streams.append(stream)
         factory.rings.append(ring)
         action = SimpleNamespace(stats=SimpleNamespace(input_overflows=0))
@@ -357,34 +360,135 @@ def test_no_input_device_has_no_configuration_or_deliverable_audio(monkeypatch):
         sip.delete(backend)
 
 
-def test_legacy_selectors_share_canonical_configuration(capture):
-    backend, _ = capture
-    assert backend.select_first_channel(5) == (True, 5)
-    configuration = backend.channel_configuration
-    assert configuration.channel_ids == (5,)
-    assert backend.select_second_channel(2) == (True, 2)
-    assert backend.channel_configuration is configuration
-    backend.set_duo_input()
-    assert backend.channel_configuration.channel_ids == (2, 5)
-    backend.select_second_channel(5)
-    assert backend.channel_configuration.channel_ids == (5,)
-    backend.set_single_input()
-    assert backend.channel_configuration.channel_ids == (5,)
+@pytest.mark.parametrize("paused", [False, True])
+def test_device_and_noncontiguous_channels_are_published_as_one_transaction(capture, paused):
+    backend, factory = capture
+    backend.select_channels([1, 4, 7])
+    old_stream = backend.stream
+    previous_generation = backend.channel_configuration.generation
+    if paused:
+        backend.pause()
+    factory.pending_samples = np.ones((17, 4), dtype=np.float32)
+    events = []
+    backend.configuration_changed.connect(events.append)
+
+    assert backend.select_input_device(1, [3, 1, 3]) == (True, 1)
+
+    assert len(events) == 1
+    configuration = events[0]
+    assert configuration is backend.channel_configuration
+    assert configuration.channel_ids == (1, 3)
+    assert configuration.device_id == 8
+    assert configuration.generation == previous_generation + 1
+    assert backend.ringBuffer.read_available == 0
+    assert backend.stream_read_index == 17
+    assert backend.running is not paused
+    assert backend.stream.active is not paused
+    assert backend.stream.start_calls == (0 if paused else 1)
+    assert old_stream.close_calls == 1
+
+
+@pytest.mark.parametrize("channels", [[], [-1], [4], [1.0], [True], ["1"]])
+def test_invalid_device_channel_transaction_preserves_capture(capture, distinct_channels, channels):
+    backend, factory = capture
+    backend.select_channels([0, 2, 7])
+    backend.ringBuffer.load(distinct_channels)
+    previous = (backend.stream, backend.ringBuffer, backend.action, backend.channel_configuration)
+    events = []
+    backend.configuration_changed.connect(events.append)
+
+    assert backend.select_input_device(1, channels) == (False, 0)
+
+    assert (backend.stream, backend.ringBuffer, backend.action, backend.channel_configuration) == previous
+    assert len(factory.streams) == 1
+    assert backend.stream.active and backend.running
+    np.testing.assert_array_equal(backend.ringBuffer.samples, distinct_channels)
+    assert events == []
+
+
+@pytest.mark.parametrize("failure, paused", [("open", False), ("start", False), ("open", True)])
+def test_failed_explicit_device_channel_transaction_preserves_every_capture_field(
+        capture, distinct_channels, failure, paused):
+    backend, factory = capture
+    backend.select_channels([1, 3, 6])
+    if paused:
+        backend.pause()
+    backend.ringBuffer.load(distinct_channels)
+    previous = (backend.stream, backend.ringBuffer, backend.action, backend.channel_configuration,
+                backend.device, backend.nchannels_max, backend.stream_start_time,
+                backend.stream_read_index, backend.xruns, backend.running)
+    starts, stops = backend.stream.start_calls, backend.stream.stop_calls
+    factory.fail_open = failure == "open"
+    factory.fail_start = failure == "start"
+    events = []
+    backend.configuration_changed.connect(events.append)
+
+    assert backend.select_input_device(1, (0, 2, 3)) == (False, 0)
+
+    assert (backend.stream, backend.ringBuffer, backend.action, backend.channel_configuration,
+            backend.device, backend.nchannels_max, backend.stream_start_time,
+            backend.stream_read_index, backend.xruns, backend.running) == previous
+    assert backend.stream.active is not paused
+    assert (backend.stream.start_calls, backend.stream.stop_calls) == (starts, stops)
+    np.testing.assert_array_equal(backend.ringBuffer.samples, distinct_channels)
+    assert events == []
 
 
 @pytest.mark.parametrize("paused", [False, True])
-def test_legacy_selection_preserves_run_pause(capture, paused):
-    backend, _ = capture
+def test_explicit_channels_on_active_device_reconfigure_without_reopening(capture, distinct_channels, paused):
+    backend, factory = capture
     if paused:
         backend.pause()
+    backend.ringBuffer.load(distinct_channels[:17])
     stream = backend.stream
     starts, stops = stream.start_calls, stream.stop_calls
-    backend.select_first_channel(4)
-    backend.select_second_channel(6)
-    backend.set_duo_input()
+    generation = backend.channel_configuration.generation
+
+    assert backend.select_input_device(0, [6, 2]) == (True, 0)
+
+    assert backend.channel_configuration.channel_ids == (2, 6)
+    assert backend.channel_configuration.generation == generation + 1
+    assert backend.stream is stream
+    assert len(factory.streams) == 1
+    assert backend.ringBuffer.read_available == 0
     assert backend.running is not paused
     assert stream.active is not paused
     assert (stream.start_calls, stream.stop_calls) == (starts, stops)
+    current = backend.channel_configuration
+    assert backend.select_input_device(0, [2, 6]) == (True, 0)
+    assert backend.channel_configuration is current
+    assert backend.select_input_device(0, [8]) == (False, 0)
+    assert backend.channel_configuration is current
+
+
+def test_new_device_without_saved_channels_defaults_to_first_input(capture):
+    backend, _ = capture
+    backend.select_channels([2, 5, 7])
+    assert backend.select_input_device(1) == (True, 1)
+    assert backend.channel_configuration.channel_ids == (0,)
+
+
+def test_device_metadata_uses_the_capture_enumeration_order(capture, monkeypatch):
+    backend, _ = capture
+    # Re-enumeration must not replace the cached capture selector order.
+    # Display labels and stable identities must refer to the same devices.
+    monkeypatch.setattr(backend, "get_input_devices", Mock(side_effect=AssertionError("must use cached devices")))
+    default = backend.input_devices[1].copy()
+    raw_devices = [None] * 9
+    raw_devices[3] = backend.input_devices[0]
+    raw_devices[8] = default
+    monkeypatch.setattr(audiobackend.sounddevice, "query_devices",
+                        lambda kind=None: default.copy() if kind == "input" else raw_devices)
+    monkeypatch.setattr(audiobackend.sounddevice, "query_hostapis",
+                        lambda index: {"name": ("WASAPI", "ASIO")[index]})
+
+    assert backend.get_input_device_identities() == [("Eight inputs", "WASAPI"), ("Four inputs", "ASIO")]
+    assert [backend.get_input_device_channel_count(index) for index in range(2)] == [8, 4]
+    labels = backend.get_readable_devices_list()
+    assert labels[0].startswith("Eight inputs (8 channels) (WASAPI)")
+    assert labels[1].startswith("Four inputs (4 channels) (ASIO)")
+    assert "(default)" not in labels[0]
+    assert "(default)" in labels[1]
 
 
 @pytest.mark.parametrize("running", [False, True])
@@ -394,12 +498,13 @@ def test_settings_changes_preserve_capture_state(capture, monkeypatch, running):
         backend.pause()
     monkeypatch.setattr(settings_module, "AudioBackend", lambda: backend)
     monkeypatch.setattr(backend, "get_readable_devices_list", lambda: ["Eight inputs", "Four inputs"])
+    monkeypatch.setattr(backend, "get_input_device_identities", lambda: [("Eight inputs", "WASAPI"), ("Four inputs", "ASIO")])
     dialog = Settings_Dialog(None)
     try:
-        dialog.first_channel_changed(5)
-        dialog.second_channel_changed(2)
-        dialog.radioButton_duo.setChecked(True)
+        dialog.listWidget_channels.item(5).setCheckState(Qt.CheckState.Checked)
+        dialog.listWidget_channels.item(2).setCheckState(Qt.CheckState.Checked)
         dialog.comboBox_inputDevice.setCurrentIndex(1)
+        dialog.comboBox_inputDevice.activated.emit(1)
         assert backend.running is running
         assert dialog.comboBox_inputDevice.currentIndex() == 1
     finally:
@@ -410,15 +515,57 @@ def test_failed_settings_device_change_reverts_once_without_recursive_selection(
     backend, factory = capture
     monkeypatch.setattr(settings_module, "AudioBackend", lambda: backend)
     monkeypatch.setattr(backend, "get_readable_devices_list", lambda: ["Eight inputs", "Four inputs"])
+    monkeypatch.setattr(backend, "get_input_device_identities", lambda: [("Eight inputs", "WASAPI"), ("Four inputs", "ASIO")])
     selector = Mock(wraps=backend.select_input_device)
     monkeypatch.setattr(backend, "select_input_device", selector)
     dialog = Settings_Dialog(None)
     try:
         factory.fail_open = True
         dialog.comboBox_inputDevice.setCurrentIndex(1)
+        dialog.comboBox_inputDevice.activated.emit(1)
         selector.assert_called_once_with(1)
         assert dialog.comboBox_inputDevice.currentIndex() == 0
         assert dialog.settings_model.get("deviceName") == "Eight inputs"
-        assert dialog.comboBox_firstChannel.currentIndex() == backend.get_current_first_channel()
+        assert [row for row in range(dialog.listWidget_channels.count())
+                if dialog.listWidget_channels.item(row).checkState() == Qt.CheckState.Checked] == list(backend.channel_configuration.channel_ids)
+    finally:
+        sip.delete(dialog)
+
+
+def test_reselecting_active_fallback_replaces_unavailable_saved_preference(capture, monkeypatch, tmp_path):
+    backend, factory = capture
+    backend.select_channels([2, 7])
+    monkeypatch.setattr(settings_module, "AudioBackend", lambda: backend)
+    monkeypatch.setattr(backend, "get_readable_devices_list", lambda: ["Eight inputs", "Four inputs"])
+    monkeypatch.setattr(backend, "get_input_device_identities",
+                        lambda: [("Eight inputs", "WASAPI"), ("Four inputs", "ASIO")])
+    profile = QSettings(str(tmp_path / "missing-input.ini"), QSettings.Format.IniFormat)
+    profile.setValue("deviceName", "Temporarily unplugged")
+    profile.setValue("deviceHostApi", "WASAPI")
+    profile.setValue("selectedChannels", [1, 4, 6])
+    dialog = Settings_Dialog(None)
+    try:
+        dialog.restoreState(profile)
+        assert dialog.comboBox_inputDevice.currentIndex() == 0
+        assert "unavailable" in dialog.label_inputStatus.text()
+        assert dialog.settings_model.get("deviceName") == "Temporarily unplugged"
+        previous_configuration = backend.channel_configuration
+        selector = Mock(wraps=backend.select_input_device)
+        monkeypatch.setattr(backend, "select_input_device", selector)
+
+        # A user may explicitly choose the same item already displayed. Qt
+        # emits activated in this case, but currentIndexChanged is silent.
+        dialog.comboBox_inputDevice.activated.emit(0)
+
+        selector.assert_called_once_with(0)
+        assert backend.channel_configuration is previous_configuration
+        assert len(factory.streams) == 1
+        assert dialog.settings_model.get("deviceName") == "Eight inputs"
+        assert dialog.settings_model.get("deviceHostApi") == "WASAPI"
+        assert dialog.settings_model.get("selectedChannels") == [2, 7]
+        assert dialog.label_inputStatus.text() == ""
+        dialog.saveState(profile)
+        assert profile.value("deviceName") == "Eight inputs"
+        assert profile.value("selectedChannels") == [2, 7]
     finally:
         sip.delete(dialog)

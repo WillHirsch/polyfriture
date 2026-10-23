@@ -18,14 +18,11 @@
 # You should have received a copy of the GNU General Public License
 # along with Friture.  If not, see <http://www.gnu.org/licenses/>.
 
-import sys
 import logging
-import re
 
 from PyQt6 import QtCore, QtWidgets
-from PyQt6.QtCore import pyqtSignal  # type: ignore
+from PyQt6.QtCore import pyqtSignal
 from polyfriture.audiobackend import AudioBackend
-from polyfriture.application import APPLICATION_DISPLAY_NAME
 from polyfriture.channel_grid_settings import CHANNEL_GRID_COLUMNS
 from polyfriture.ui_settings import Ui_Settings_Dialog
 from polyfriture.settings_binding import bind_spinbox
@@ -33,42 +30,29 @@ from polyfriture.settings_model import IntSetting, SettingsModel, ValueSetting
 from polyfriture.theme_manager import THEME_LABELS, THEME_SETTING
 
 
-# These IDs are persisted by older settings dialogs as well as this one.
-INPUT_TYPE_IDS = {"Single channel": -2, "Two channels": -3}
-
-
-def _input_type(value):
-    if isinstance(value, str) and re.fullmatch(r"[+-]?\d+", value):
-        value = int(value)
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError("input type must be an integer")
-    if value == 0:  # Historical default before an input type was saved.
-        return INPUT_TYPE_IDS["Single channel"]
-    if value not in INPUT_TYPE_IDS.values():
-        raise ValueError("unknown input type")
-    return value
+def _selected_channels(value):
+    # QSettings INI files can reload a singleton list as an integer/string.
+    if isinstance(value, (int, str)) and not isinstance(value, bool):
+        value = [value]
+    if not isinstance(value, (list, tuple)) or not value:
+        raise ValueError("select at least one channel")
+    channel = IntSetting(0, minimum=0)
+    return sorted({channel.coerce(identifier) for identifier in value})
 
 
 class GlobalSettings(SettingsModel):
-    """Audio preferences and the settings dialog's display preferences."""
+    """Requested audio selection and the dialog's display preferences."""
 
     fields = {
         "deviceName": ValueSetting(""),
-        "firstChannel": IntSetting(0, minimum=0),
-        "secondChannel": IntSetting(0, minimum=0),
-        "duoInput": ValueSetting(INPUT_TYPE_IDS["Single channel"], decode=_input_type),
+        "deviceHostApi": ValueSetting(""),
+        "selectedChannels": ValueSetting([0], decode=_selected_channels),
         "themePreference": THEME_SETTING,
         "channelGridColumns": CHANNEL_GRID_COLUMNS,
     }
 
-no_input_device_title = "No audio input device found"
 
-no_input_device_message = f"""No audio input device has been found.
-
-{APPLICATION_DISPLAY_NAME} needs at least one input device. Please check your audio configuration.
-
-{APPLICATION_DISPLAY_NAME} will now exit.
-"""
+NO_INPUT_STATUS = "No usable audio input is active. Choose an input device, or reconnect it and restart."
 
 
 class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
@@ -76,198 +60,154 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
     channel_grid_columns_changed = pyqtSignal(int)
 
     def __init__(self, parent):
-        QtWidgets.QDialog.__init__(self, parent)
-        Ui_Settings_Dialog.__init__(self)
-
+        super().__init__(parent)
         self.logger = logging.getLogger(__name__)
         self.settings_model = GlobalSettings()
-
-        # Setup the user interface
         self.setupUi(self)
-
         for button, scheme in (
                 (self.radioButton_themeSystem, QtCore.Qt.ColorScheme.Unknown),
                 (self.radioButton_themeLight, QtCore.Qt.ColorScheme.Light),
                 (self.radioButton_themeDark, QtCore.Qt.ColorScheme.Dark)):
             self.themeButtonGroup.setId(button, scheme.value)
             button.setText(THEME_LABELS[scheme])
-        for button, (label, identifier) in zip((self.radioButton_single, self.radioButton_duo),
-                                              INPUT_TYPE_IDS.items()):
-            self.inputTypeButtonGroup.setId(button, identifier)
-            button.setText(label)
-
-        # Display controls work even when no audio hardware is available.
         self.themeButtonGroup.idToggled.connect(self.theme_preference_toggled)
         bind_spinbox(self.spinBox_channelGridColumns, self.settings_model,
                      "channelGridColumns", self.channel_grid_columns_changed.emit)
 
-        devices = AudioBackend().get_readable_devices_list()
+        backend = AudioBackend()
+        devices = backend.get_readable_devices_list()
+        self._input_identities = backend.get_input_device_identities() if devices else []
+        self.comboBox_inputDevice.addItems(devices)
+        self._refresh_input_ui()
+        self._adopt_current_input()
+        self._set_input_status(NO_INPUT_STATUS if backend.channel_configuration is None else "")
+        self.comboBox_inputDevice.activated.connect(self.input_device_changed)
+        self.listWidget_channels.itemChanged.connect(self.channels_changed)
+        backend.configuration_changed.connect(self._input_configuration_changed)
 
-        if devices == []:
-            # no audio input device
-            application = QtWidgets.QApplication.instance()
-            assert isinstance(application, QtWidgets.QApplication)
-            if application.platformName() == "offscreen":
-                # Headless (e.g. the CI smoke test).
-                # Log and continue with an empty device set instead of exiting,
-                # for validation purposes.
-                self.logger.warning("No audio input device available; continuing in headless mode")
-                return
-            # display a message and exit
-            QtWidgets.QMessageBox.critical(self, no_input_device_title, no_input_device_message)
-            QtCore.QTimer.singleShot(0, self.exitOnInit)
-            sys.exit(1)
-            return
+    def _set_input_status(self, message):
+        self.label_inputStatus.setText(message)
+        self.label_inputStatus.setVisible(bool(message))
 
-        for device in devices:
-            self.comboBox_inputDevice.addItem(device)
+    def _active_input_description(self):
+        if AudioBackend().channel_configuration is None:
+            return "No audio input is active."
+        return f"Using {self.comboBox_inputDevice.currentText()}."
 
-        channels = AudioBackend().get_readable_current_channels()
-        for channel in channels:
-            self.comboBox_firstChannel.addItem(channel)
-            self.comboBox_secondChannel.addItem(channel)
+    def _input_configuration_changed(self, configuration):
+        self._refresh_input_ui()
 
-        current_device = AudioBackend().get_readable_current_device()
-        self.comboBox_inputDevice.setCurrentIndex(current_device)
+    def _refresh_input_ui(self):
+        backend = AudioBackend()
+        configuration = backend.channel_configuration
+        index = backend.get_readable_current_device() if configuration is not None else -1
+        with QtCore.QSignalBlocker(self.comboBox_inputDevice):
+            self.comboBox_inputDevice.setCurrentIndex(index)
+        with QtCore.QSignalBlocker(self.listWidget_channels):
+            count = configuration.device_channel_count if configuration is not None else 0
+            if self.listWidget_channels.count() != count:
+                self.listWidget_channels.clear()
+                for channel_id in range(count):
+                    item = QtWidgets.QListWidgetItem(f"Channel {channel_id + 1}")
+                    item.setFlags(item.flags() | QtCore.Qt.ItemFlag.ItemIsUserCheckable)
+                    item.setData(QtCore.Qt.ItemDataRole.UserRole, channel_id)
+                    self.listWidget_channels.addItem(item)
+            selected = set(configuration.channel_ids) if configuration is not None else set()
+            for row in range(count):
+                item = self.listWidget_channels.item(row)
+                item.setCheckState(QtCore.Qt.CheckState.Checked if row in selected else QtCore.Qt.CheckState.Unchecked)
+            self.listWidget_channels.setEnabled(configuration is not None)
 
-        first_channel = AudioBackend().get_current_first_channel()
-        self.comboBox_firstChannel.setCurrentIndex(first_channel)
-        second_channel = AudioBackend().get_current_second_channel()
-        self.comboBox_secondChannel.setCurrentIndex(second_channel)
+    def _adopt_current_input(self):
+        """An explicit user choice replaces any unavailable saved preference."""
+        backend = AudioBackend()
+        configuration = backend.channel_configuration
+        if configuration is not None:
+            name, api = self._input_identities[backend.get_readable_current_device()]
+            self.settings_model.update({"deviceName": name, "deviceHostApi": api,
+                                        "selectedChannels": list(configuration.channel_ids)})
 
-        # signals
-        self.comboBox_inputDevice.currentIndexChanged.connect(self.input_device_changed)
-        self.comboBox_firstChannel.activated.connect(self.first_channel_changed)
-        self.comboBox_secondChannel.activated.connect(self.second_channel_changed)
-        self.radioButton_single.toggled.connect(self.single_input_type_selected)
-        self.radioButton_duo.toggled.connect(self.duo_input_type_selected)
-
-    # slot
-    # used when no audio input device has been found, to exit immediately
-    def exitOnInit(self):
-        QtWidgets.QApplication.instance().quit()
-
-    # slot
     def input_device_changed(self, index):
         if index < 0:
             return
-        success, index = AudioBackend().select_input_device(index)
+        requested = self.comboBox_inputDevice.itemText(index)
+        success, _ = AudioBackend().select_input_device(index)
+        self._refresh_input_ui()
+        if success:
+            self._adopt_current_input()
+            self._set_input_status("")
+        else:
+            self._set_input_status(f"Could not open {requested}. {self._active_input_description()} "
+                                   "The previous input selection is retained.")
 
-        # A failed change restores the previous choice without requesting a
-        # second device change through currentIndexChanged.
-        with QtCore.QSignalBlocker(self.comboBox_inputDevice):
-            self.comboBox_inputDevice.setCurrentIndex(index)
-        self.settings_model.set("deviceName", self.comboBox_inputDevice.currentText())
-
-        if not success:
-            # Note: the error message is a child of the settings dialog, so that
-            # that dialog remains on top when the error message is closed
-            error_message = QtWidgets.QErrorMessage(self)
-            error_message.setWindowTitle("Input device error")
-            error_message.showMessage("Impossible to use the selected input device, reverting to the previous one")
-
-        # reset the channels
-        channels = AudioBackend().get_readable_current_channels()
-
-        self.comboBox_firstChannel.clear()
-        self.comboBox_secondChannel.clear()
-
-        for channel in channels:
-            self.comboBox_firstChannel.addItem(channel)
-            self.comboBox_secondChannel.addItem(channel)
-
-        first_channel = AudioBackend().get_current_first_channel()
-        self.comboBox_firstChannel.setCurrentIndex(first_channel)
-        second_channel = AudioBackend().get_current_second_channel()
-        self.comboBox_secondChannel.setCurrentIndex(second_channel)
-
-    # slot
-    def first_channel_changed(self, index):
-        if index < 0:
+    def channels_changed(self, item):
+        channels = [self.listWidget_channels.item(row).data(QtCore.Qt.ItemDataRole.UserRole)
+                    for row in range(self.listWidget_channels.count())
+                    if self.listWidget_channels.item(row).checkState() == QtCore.Qt.CheckState.Checked]
+        if not channels:
+            self._refresh_input_ui()
+            self._set_input_status("Select at least one channel.")
             return
-        success, index = AudioBackend().select_first_channel(index)
-
-        self.comboBox_firstChannel.setCurrentIndex(index)
-        self.settings_model.set("firstChannel", index)
-
-        if not success:
-            # Note: the error message is a child of the settings dialog, so that
-            # that dialog remains on top when the error message is closed
-            error_message = QtWidgets.QErrorMessage(self)
-            error_message.setWindowTitle("Input device error")
-            error_message.showMessage("Impossible to use the selected channel as the first channel, reverting to the previous one")
-
-    # slot
-    def second_channel_changed(self, index):
-        if index < 0:
+        try:
+            channels = self.settings_model.fields["selectedChannels"].coerce(channels)
+            AudioBackend().select_channels(channels)
+        except Exception:
+            self.logger.exception("Failed to change input channels")
+            self._refresh_input_ui()
+            self._set_input_status("Could not change channels. The previous input selection is retained.")
             return
-        success, index = AudioBackend().select_second_channel(index)
+        self._adopt_current_input()
+        self._set_input_status("")
 
-        self.comboBox_secondChannel.setCurrentIndex(index)
-        self.settings_model.set("secondChannel", index)
-
-        if not success:
-            # Note: the error message is a child of the settings dialog, so that
-            # that dialog remains on top when the error message is closed
-            error_message = QtWidgets.QErrorMessage(self)
-            error_message.setWindowTitle("Input device error")
-            error_message.showMessage("Impossible to use the selected channel as the second channel, reverting to the previous one")
-
-    # slot
-    def single_input_type_selected(self, checked):
-        if checked:
-            self.settings_model.set("duoInput", INPUT_TYPE_IDS["Single channel"])
-            self.groupBox_second.setEnabled(False)
-            AudioBackend().set_single_input()
-            self.logger.info("Switching to single input")
-
-    # slot
-    def duo_input_type_selected(self, checked):
-        if checked:
-            self.settings_model.set("duoInput", INPUT_TYPE_IDS["Two channels"])
-            self.groupBox_second.setEnabled(True)
-            AudioBackend().set_duo_input()
-            self.logger.info("Switching to difference between two inputs")
-
-    # slot
     def theme_preference_toggled(self, button_id: int, checked: bool) -> None:
         if checked:
             button_id = self.settings_model.set("themePreference", button_id)
             self.theme_preference_changed.emit(button_id)
-            self.logger.info("Theme preference changed to: %d", button_id)
 
-    # method
     def saveState(self, settings):
-        # for the input device, we search by name instead of index, since
-        # we do not know if the device order stays the same between sessions
-        values = {
-            "duoInput": self.inputTypeButtonGroup.checkedId(),
-            "themePreference": self.themeButtonGroup.checkedId(),
-            "channelGridColumns": self.spinBox_channelGridColumns.value(),
-        }
-        if self.comboBox_inputDevice.currentIndex() >= 0:
-            values.update(deviceName=self.comboBox_inputDevice.currentText(),
-                          firstChannel=self.comboBox_firstChannel.currentIndex(),
-                          secondChannel=self.comboBox_secondChannel.currentIndex())
-        self.settings_model.update(values)
+        # Keep unavailable preferences until the user explicitly edits audio
+        # selection; silently substituting a fallback would lose their profile.
+        self.settings_model.update({"themePreference": self.themeButtonGroup.checkedId(),
+                                    "channelGridColumns": self.spinBox_channelGridColumns.value()})
         self.settings_model.save(settings)
 
-    # method
     def restoreState(self, settings):
         self.settings_model.restore(settings)
         columns = self.settings_model.get("channelGridColumns")
         with QtCore.QSignalBlocker(self.spinBox_channelGridColumns):
             self.spinBox_channelGridColumns.setValue(columns)
         self.channel_grid_columns_changed.emit(columns)
-        device_name = self.settings_model.get("deviceName")
-        device_index = self.comboBox_inputDevice.findText(device_name)
-        # change the device only if it exists in the device list
-        if device_index >= 0:
-            self.comboBox_inputDevice.setCurrentIndex(device_index)
-            # The backend decides whether a valid channel/device is available.
-            self.first_channel_changed(self.settings_model.get("firstChannel"))
-            self.second_channel_changed(self.settings_model.get("secondChannel"))
-        duo_input_id = self.settings_model.get("duoInput")
-        self.inputTypeButtonGroup.button(duo_input_id).setChecked(True)
-        theme_preference_id = self.settings_model.get("themePreference")
-        self.themeButtonGroup.button(theme_preference_id).setChecked(True)
+        self.themeButtonGroup.button(self.settings_model.get("themePreference")).setChecked(True)
+        self._restore_input()
+
+    def _restore_input(self):
+        name = self.settings_model.get("deviceName")
+        api = self.settings_model.get("deviceHostApi")
+        if not name:
+            self._adopt_current_input()
+            self._refresh_input_ui()
+            self._set_input_status(NO_INPUT_STATUS if AudioBackend().channel_configuration is None else "")
+            return
+        matches = [index for index, (candidate, host_api) in enumerate(self._input_identities)
+                   if candidate == name and (not api or host_api == api)]
+        if len(matches) != 1:
+            reason = "unavailable" if not matches else "ambiguous"
+            self._refresh_input_ui()
+            self._set_input_status(f"Saved input {name} is {reason}. {self._active_input_description()} "
+                                   "Its selection is retained for a later start. Choose a device to replace the saved preference.")
+            return
+        index = matches[0]
+        backend = AudioBackend()
+        wanted = self.settings_model.get("selectedChannels")
+        count = backend.get_input_device_channel_count(index)
+        channels = [channel for channel in wanted if channel < count] or [0]
+        success, _ = backend.select_input_device(index, channel_ids=channels)
+        self._refresh_input_ui()
+        if not success:
+            self._set_input_status(f"Could not open saved input {name}. {self._active_input_description()} "
+                                   "Its selection is retained for a later start.")
+        elif channels != wanted:
+            self._set_input_status("Some saved channels are unavailable. The active channels are checked; "
+                                   "the saved selection is retained until you edit it.")
+        else:
+            self._set_input_status("")

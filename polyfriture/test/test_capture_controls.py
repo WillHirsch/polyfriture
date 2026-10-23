@@ -53,7 +53,8 @@ def test_migration_discards_only_playback_preferences(profile, friture_source):
     assert not profile.contains("AudioBackend/showPlayback")
     assert not profile.contains("AudioBackend/historyLength")
     assert profile.value("AudioBackend/deviceName") == "Saved device"
-    assert profile.value("AudioBackend/firstChannel", type=int) == 3
+    assert profile.value("AudioBackend/selectedChannels") == [3]
+    assert not profile.contains("AudioBackend/firstChannel")
     assert profile.value("AudioBackend/themePreference", type=int) == 2
     assert profile.value("Docks/lastSettings/5/type", type=int) == 5
     assert profile.value("Docks/lastSettings/5/generator kind", type=int) == 3

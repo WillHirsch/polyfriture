@@ -2,11 +2,12 @@
 
 from types import SimpleNamespace
 
-from PyQt6.QtCore import QByteArray, QSettings, Qt
+from PyQt6.QtCore import QByteArray, QObject, QSettings, Qt, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QMainWindow
 import pytest
 
 from polyfriture import dockmanager, settings as settings_module, theme_manager
+from polyfriture.channel_configuration import ChannelConfiguration
 from polyfriture.dock import DockSettings
 from polyfriture.defaults import DEFAULT_DOCKS
 from polyfriture.dockmanager import DockLayoutSettings, DockManager
@@ -27,54 +28,41 @@ def profile(tmp_path):
     return QSettings(str(tmp_path / "profile.ini"), QSettings.Format.IniFormat)
 
 
-class Audio:
+class Audio(QObject):
     """Hardware availability remains the backend's responsibility."""
+    configuration_changed = pyqtSignal(object)
 
     def __init__(self):
-        self.first = 0
-        self.second = 1
-        self.duo = False
+        super().__init__()
+        self.channel_configuration = ChannelConfiguration(3, (0,), 8, 1)
 
     def get_readable_devices_list(self):
         return ["Available device"]
 
-    def get_readable_current_channels(self):
-        return ["L", "R"]
+    def get_input_device_identities(self):
+        return [("Available device", "Test API")]
+
+    def get_input_device_channel_count(self, index):
+        return 8
 
     def get_readable_current_device(self):
-        return 0
+        return 0 if self.channel_configuration is not None else -1
 
-    def get_current_first_channel(self):
-        return self.first
-
-    def get_current_second_channel(self):
-        return self.second
-
-    def select_input_device(self, index):
+    def select_input_device(self, index, channel_ids=None):
+        if channel_ids is not None:
+            self.select_channels(channel_ids)
         return True, index
 
-    def select_first_channel(self, index):
-        if index in (0, 1):
-            self.first = index
-            return True, index
-        return False, self.first
-
-    def select_second_channel(self, index):
-        if index in (0, 1):
-            self.second = index
-            return True, index
-        return False, self.second
-
-    def set_single_input(self):
-        self.duo = False
-
-    def set_duo_input(self):
-        self.duo = True
+    def select_channels(self, channel_ids):
+        previous = self.channel_configuration
+        self.channel_configuration = ChannelConfiguration(3, channel_ids, 8, previous.generation + 1)
+        self.configuration_changed.emit(self.channel_configuration)
+        return self.channel_configuration
 
 
 @pytest.mark.parametrize("key,value", [
-    ("themePreference", 100), ("duoInput", "invalid"),
-    ("firstChannel", -1), ("secondChannel", 1.5),
+    ("themePreference", 100), ("selectedChannels", []),
+    ("selectedChannels", [-1]), ("selectedChannels", [1.5]), ("deviceHostApi", 1),
 ])
 def test_global_restore_recovers_one_invalid_preference(profile, key, value):
     model = GlobalSettings()
@@ -91,23 +79,21 @@ def test_global_restore_recovers_one_invalid_preference(profile, key, value):
     assert profile.value("future/opaque") == QByteArray(b"\x00opaque\xff")
 
 
-def test_global_dialog_recovers_invalid_theme_and_duo_but_keeps_valid_channel(
+def test_global_dialog_recovers_invalid_theme_but_keeps_valid_channels(
         application, profile, monkeypatch):
     audio = Audio()
     monkeypatch.setattr(settings_module, "AudioBackend", lambda: audio)
     dialog = Settings_Dialog(None)
     try:
         profile.setValue("deviceName", "Available device")
+        profile.setValue("deviceHostApi", "Test API")
         profile.setValue("themePreference", "unknown")
-        profile.setValue("duoInput", 999)
-        profile.setValue("firstChannel", "1")
+        profile.setValue("selectedChannels", [1, 4, 6])
         dialog.restoreState(profile)
         assert dialog.themeButtonGroup.checkedId() == 0
-        assert dialog.inputTypeButtonGroup.checkedId() == -2
-        assert audio.first == 1
-        dialog.radioButton_duo.setChecked(True)
-        assert dialog.settings_model.get("duoInput") == -3
-        assert audio.duo
+        assert audio.channel_configuration.channel_ids == (1, 4, 6)
+        dialog.listWidget_channels.item(2).setCheckState(Qt.CheckState.Checked)
+        assert dialog.settings_model.get("selectedChannels") == [1, 2, 4, 6]
     finally:
         dialog.close()
         dialog.deleteLater()
@@ -150,19 +136,20 @@ def test_theme_manager_and_dialog_share_assignment_rules(application, profile, m
 
 def test_unavailable_audio_device_does_not_discard_saved_choices(application, profile, monkeypatch):
     monkeypatch.setattr(settings_module, "AudioBackend",
-                        lambda: SimpleNamespace(get_readable_devices_list=lambda: []))
+                        lambda: SimpleNamespace(get_readable_devices_list=lambda: [], channel_configuration=None,
+                                                configuration_changed=SimpleNamespace(connect=lambda slot: None)))
     profile.setValue("deviceName", "Temporarily unplugged")
-    profile.setValue("firstChannel", 5)
-    profile.setValue("secondChannel", 9)
-    profile.setValue("duoInput", -3)
+    profile.setValue("deviceHostApi", "Test API")
+    profile.setValue("selectedChannels", [5, 9])
     dialog = Settings_Dialog(None)
     try:
         dialog.restoreState(profile)
         dialog.saveState(profile)
         assert profile.value("deviceName") == "Temporarily unplugged"
-        assert profile.value("firstChannel") == 5
-        assert profile.value("secondChannel") == 9
-        assert profile.value("duoInput") == -3
+        assert profile.value("deviceHostApi") == "Test API"
+        assert profile.value("selectedChannels") == [5, 9]
+        assert dialog.comboBox_inputDevice.currentIndex() == -1
+        assert not dialog.listWidget_channels.isEnabled()
     finally:
         dialog.close()
         dialog.deleteLater()

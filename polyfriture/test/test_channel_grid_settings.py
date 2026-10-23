@@ -21,7 +21,8 @@ def profile(tmp_path):
 def dialog(monkeypatch):
     # Display preferences work without touching real audio devices or settings.
     monkeypatch.setattr(settings_module, "AudioBackend", lambda: SimpleNamespace(
-        get_readable_devices_list=lambda: []))
+        get_readable_devices_list=lambda: [], channel_configuration=None,
+        configuration_changed=SimpleNamespace(connect=lambda slot: None)))
     value = Settings_Dialog(None)
     yield value
     value.close()

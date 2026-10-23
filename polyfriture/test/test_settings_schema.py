@@ -24,7 +24,7 @@ def test_unversioned_layout_is_upgraded_and_unknown_qt_values_are_preserved():
 
     assert values == {
         "AudioBackend/deviceName": "Input",
-        "AudioBackend/duoInput": -2,
+        "AudioBackend/selectedChannels": [0],
         "Docks/widgetIdStack": [],
         "Docks/dockNames": ["Meters", "central", "Scope"],
         "Docks/Meters/type": 9,
@@ -51,7 +51,7 @@ def test_malformed_existing_layout_is_preserved_without_source_validation(names)
 
     settings_schema.apply_upgrades(values, 0)
 
-    assert values == original
+    assert values == {**original, "AudioBackend/selectedChannels": [0]}
 
 
 @pytest.mark.parametrize("widget_id,expected_names", [(0, []), (1, ["Panel"])])
@@ -79,7 +79,8 @@ def test_malformed_or_unknown_widget_ids_are_retained(widget_id):
 
     settings_schema.apply_upgrades(values, 0)
 
-    assert values == {**original, "Docks/dockNames": ["Meters", "Panel"], "Docks/Meters/type": 9}
+    assert values == {**original, "Docks/dockNames": ["Meters", "Panel"], "Docks/Meters/type": 9,
+                      "AudioBackend/selectedChannels": [0]}
 
 
 @pytest.mark.parametrize("widget_id", [0, "0", "+00", "-0"])
@@ -92,7 +93,8 @@ def test_obsolete_level_widget_integer_representations_are_removed(widget_id):
 
     settings_schema.apply_upgrades(values, 0)
 
-    assert values == {"Docks/dockNames": ["Meters"], "Docks/Meters/type": 9}
+    assert values == {"Docks/dockNames": ["Meters"], "Docks/Meters/type": 9,
+                      "AudioBackend/selectedChannels": [0]}
 
 
 @pytest.mark.parametrize("from_version", [0, 1])
@@ -122,7 +124,7 @@ def test_feature_removals_upgrade_existing_and_imported_profiles(from_version):
 
     assert values == {
         "AudioBackend/deviceName": "Input",
-        "AudioBackend/duoInput": -3,
+        "AudioBackend/selectedChannels": [0, 0],
         "Docks/dockNames": ["Meters", "Levels", "Pitch", "Spectrum"],
         "Docks/Meters/type": 9,
         "Docks/Levels/type": 7,
@@ -152,7 +154,8 @@ def test_retired_delay_representations_leave_only_the_new_meter_panel(widget_id,
 
     settings_schema.apply_upgrades(values, 1)
 
-    assert values == {"Docks/dockNames": ["Meters"], "Docks/Meters/type": 9}
+    assert values == {"Docks/dockNames": ["Meters"], "Docks/Meters/type": 9,
+                      "AudioBackend/selectedChannels": [0]}
 
 
 @pytest.mark.parametrize("names", [None, [], "Surviving"])
@@ -162,7 +165,7 @@ def test_v1_optional_and_singleton_layout_encodings_are_normalized(names):
     settings_schema.apply_upgrades(values, 1)
 
     assert values == {"Docks/dockNames": ["Meters", names] if isinstance(names, str) else ["Meters"],
-                      "Docks/Meters/type": 9}
+                      "Docks/Meters/type": 9, "AudioBackend/selectedChannels": [0]}
 
 
 @pytest.mark.parametrize("stack,expected", [
@@ -175,7 +178,7 @@ def test_v1_stack_encodings_remove_only_retired_ids(stack, expected):
 
     settings_schema.apply_upgrades(values, 1)
 
-    assert values == {"Docks/widgetIdStack": expected}
+    assert values == {"Docks/widgetIdStack": expected, "AudioBackend/selectedChannels": [0]}
 
 
 @pytest.mark.parametrize("widget_id", [False, 6.0, "6.0", "invalid", 2**40, 7, 8])
@@ -191,7 +194,8 @@ def test_unknown_and_malformed_delay_ids_are_retained(widget_id):
 
     settings_schema.apply_upgrades(values, 1)
 
-    assert values == {**original, "Docks/dockNames": ["Meters", "Panel"], "Docks/Meters/type": 9}
+    assert values == {**original, "Docks/dockNames": ["Meters", "Panel"], "Docks/Meters/type": 9,
+                      "AudioBackend/selectedChannels": [0]}
     assert values["Docks/Panel/custom"] is opaque
 
 
@@ -215,6 +219,7 @@ def test_malformed_layout_does_not_prevent_independent_feature_cleanup(names, fr
         "Docks/Unknown/type": "invalid",
         "Docks/widgetIdStack": [7],
         "Docks/lastSettings/8/freqMin": 80,
+        "AudioBackend/selectedChannels": [0],
     }
 
 
@@ -252,6 +257,7 @@ def test_v2_does_not_reapply_existing_v1_layout_upgrades():
         "Docks/dockNames": ["Meters", "Old level"],
         "Docks/Meters/type": 9,
         "Docks/Old level/type": 0,
+        "AudioBackend/selectedChannels": [0],
     }
 
 
@@ -328,7 +334,7 @@ def test_v3_does_not_duplicate_existing_active_meter_panels(widget_id):
               "Docks/Scope/type": 1, "Docks/Custom meter/type": widget_id}
     original = values.copy()
     settings_schema.apply_upgrades(values, 2)
-    assert values == original
+    assert values == {**original, "AudioBackend/selectedChannels": [0]}
 
 
 @pytest.mark.parametrize("widget_id", [True, 9.0, "9.0", "unknown"])
@@ -336,7 +342,8 @@ def test_v3_unknown_or_malformed_ids_do_not_hide_the_former_meters(widget_id):
     values = {"Docks/dockNames": ["Unknown"], "Docks/Unknown/type": widget_id}
     settings_schema.apply_upgrades(values, 2)
     assert values == {"Docks/dockNames": ["Meters", "Unknown"],
-                      "Docks/Unknown/type": widget_id, "Docks/Meters/type": 9}
+                      "Docks/Unknown/type": widget_id, "Docks/Meters/type": 9,
+                      "AudioBackend/selectedChannels": [0]}
 
 
 def test_v3_unique_meter_name_preserves_inactive_groups_and_layout_order():
@@ -346,7 +353,7 @@ def test_v3_unique_meter_name_preserves_inactive_groups_and_layout_order():
     original = values.copy()
     settings_schema.apply_upgrades(values, 2)
     assert values == {**original, "Docks/dockNames": ["Meters 4", "Meters", "Scope"],
-                      "Docks/Meters 4/type": 9}
+                      "Docks/Meters 4/type": 9, "AudioBackend/selectedChannels": [0]}
 
 
 @pytest.mark.parametrize("values", [{}, {"Docks/Scope/type": 1},
@@ -355,10 +362,145 @@ def test_v3_unique_meter_name_preserves_inactive_groups_and_layout_order():
 def test_v3_missing_and_malformed_layouts_are_not_materialized_or_repaired(values):
     original = values.copy()
     settings_schema.apply_upgrades(values, 2)
-    assert values == original
+    assert values == {**original, "AudioBackend/selectedChannels": [0]}
 
 
 def test_meters_removed_from_current_layout_are_not_readded_on_later_launches():
     values = {"Docks/dockNames": []}
     settings_schema.apply_upgrades(values, settings_schema.CURRENT_VERSION)
     assert values == {"Docks/dockNames": []}
+
+
+@pytest.mark.parametrize("mode", [-3, "-3", "-003"])
+def test_v4_replaces_legacy_dual_selection_without_validating_channels(mode):
+    values = {"AudioBackend/firstChannel": "7", "AudioBackend/secondChannel": 3,
+              "AudioBackend/duoInput": mode, "extension/value": QByteArray(b"retained")}
+
+    settings_schema.apply_upgrades(values, 3)
+
+    assert values == {"AudioBackend/selectedChannels": ["7", 3],
+                      "extension/value": QByteArray(b"retained")}
+    upgraded = values.copy()
+    settings_schema.apply_upgrades(values, 3)
+    assert values == upgraded
+
+
+@pytest.mark.parametrize("mode", [None, -2, 0, "-2", "0", True, False, -3.0,
+                                  " -3", "-3 ", "-3.0", "unknown", [], {}])
+def test_v4_missing_single_and_invalid_legacy_modes_use_only_first_channel(mode):
+    values = {"AudioBackend/firstChannel": 7, "AudioBackend/secondChannel": 3,
+              "AudioBackend/duoInput": mode}
+
+    settings_schema.apply_upgrades(values, 3)
+
+    assert values == {"AudioBackend/selectedChannels": [7]}
+
+
+@pytest.mark.parametrize("legacy,expected", [
+    ({}, [0]),
+    ({"AudioBackend/secondChannel": 7}, [0]),
+    ({"AudioBackend/duoInput": -3}, [0, 0]),
+    ({"AudioBackend/duoInput": -3, "AudioBackend/firstChannel": 5}, [5, 0]),
+    ({"AudioBackend/duoInput": -3, "AudioBackend/secondChannel": 7}, [0, 7]),
+])
+def test_v4_missing_legacy_channel_values_keep_their_historical_defaults(legacy, expected):
+    values = dict(legacy)
+    settings_schema.apply_upgrades(values, 3)
+    assert values == {"AudioBackend/selectedChannels": expected}
+
+
+@pytest.mark.parametrize("invalid", [None, True, -1, 1.5, " 2", "invalid", [1], {"opaque": 1},
+                                     QByteArray(b"opaque")])
+def test_v4_keeps_invalid_legacy_channel_values_for_owner_recovery(invalid):
+    values = {"AudioBackend/firstChannel": invalid, "AudioBackend/secondChannel": 4,
+              "AudioBackend/duoInput": -3, "AudioBackend/themePreference": 2}
+
+    settings_schema.apply_upgrades(values, 3)
+
+    assert values == {"AudioBackend/selectedChannels": [invalid, 4],
+                      "AudioBackend/themePreference": 2}
+    assert values["AudioBackend/selectedChannels"][0] is invalid
+
+
+@pytest.mark.parametrize("selection", [[1, 3, 7], [0], [], "3", None, "invalid", True,
+                                      QByteArray(b"opaque")])
+def test_v4_does_not_replace_an_existing_selection_even_when_invalid(selection):
+    values = {"AudioBackend/selectedChannels": selection, "AudioBackend/firstChannel": 5,
+              "AudioBackend/secondChannel": 7, "AudioBackend/duoInput": -3}
+
+    settings_schema.apply_upgrades(values, 3)
+
+    assert values == {"AudioBackend/selectedChannels": selection}
+    assert values["AudioBackend/selectedChannels"] is selection
+
+
+@pytest.mark.parametrize("name,expected_name,expected_api", [
+    ("USB interface (16 channels) (Windows WASAPI) ", "USB interface", "Windows WASAPI"),
+    ("USB interface (16 channels) (Windows WASAPI)  (default)", "USB interface", "Windows WASAPI"),
+    ("Interface (USB) (2 channels) (ALSA) ", "Interface (USB)", "ALSA"),
+    ("Device (2 channels) (Raw name) (64 channels) (Core Audio) ",
+     "Device (2 channels) (Raw name)", "Core Audio"),
+])
+def test_v4_separates_decorated_device_names_from_stable_host_api(name, expected_name, expected_api):
+    values = {"AudioBackend/deviceName": name}
+
+    settings_schema.apply_upgrades(values, 3)
+
+    assert values == {"AudioBackend/deviceName": expected_name,
+                      "AudioBackend/deviceHostApi": expected_api, "AudioBackend/selectedChannels": [0]}
+    upgraded = values.copy()
+    settings_schema.apply_upgrades(values, 3)
+    assert values == upgraded
+
+
+@pytest.mark.parametrize("name", [None, 42, "USB interface", "Interface (USB)",
+                                  "Device (2 channels) (WASAPI)",
+                                  "Device (2 channels) (API (ambiguous)) ",
+                                  "Device (2 channels) () ",
+                                  "Device (2 channels) (WASAPI) (default)",
+                                  "Device (two channels) (WASAPI) "])
+def test_v4_preserves_raw_or_ambiguous_device_names(name):
+    values = {"AudioBackend/deviceName": name}
+    settings_schema.apply_upgrades(values, 3)
+    assert values == {"AudioBackend/deviceName": name, "AudioBackend/selectedChannels": [0]}
+
+
+@pytest.mark.parametrize("host_api", ["explicit API", "", None])
+@pytest.mark.parametrize("name", ["USB interface (16 channels) (Windows WASAPI) ",
+                                  "USB interface (16 channels) (Windows WASAPI)  (default)"])
+def test_v4_preserves_an_explicit_device_identity_for_normal_owner_recovery(name, host_api):
+    values = {"AudioBackend/deviceName": name, "AudioBackend/deviceHostApi": host_api}
+    settings_schema.apply_upgrades(values, 3)
+    assert values == {"AudioBackend/deviceName": name, "AudioBackend/deviceHostApi": host_api,
+                      "AudioBackend/selectedChannels": [0]}
+
+
+def test_v4_does_not_reinterpret_a_raw_device_name_that_itself_looks_decorated():
+    raw_name = "Device (2 channels) (Raw API) "
+    values = {"AudioBackend/deviceName": raw_name + " (64 channels) (Core Audio) "}
+
+    settings_schema.apply_upgrades(values, 3)
+
+    expected = {"AudioBackend/deviceName": raw_name, "AudioBackend/deviceHostApi": "Core Audio",
+                "AudioBackend/selectedChannels": [0]}
+    assert values == expected
+    settings_schema.apply_upgrades(values, 3)
+    assert values == expected
+
+
+def test_v4_does_not_restore_meter_panels_removed_from_a_version_three_profile():
+    values = {"Docks/dockNames": [], "AudioBackend/firstChannel": 4}
+    settings_schema.apply_upgrades(values, 3)
+    assert values == {"Docks/dockNames": [], "AudioBackend/selectedChannels": [4]}
+
+
+def test_historical_schema_steps_keep_their_original_audio_selection_contract():
+    values = {"AudioBackend/deviceName": "Device (2 channels) (WASAPI) ",
+              "AudioBackend/firstChannel": 1}
+    settings_schema.UPGRADES[0](values)
+    assert values == {"AudioBackend/deviceName": "Device (2 channels) (WASAPI) ",
+                      "AudioBackend/firstChannel": 1, "AudioBackend/duoInput": -2}
+    previous = values.copy()
+    settings_schema.UPGRADES[1](values)
+    settings_schema.UPGRADES[2](values)
+    assert values == previous
