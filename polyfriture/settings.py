@@ -26,7 +26,9 @@ from PyQt6 import QtCore, QtWidgets
 from PyQt6.QtCore import pyqtSignal  # type: ignore
 from polyfriture.audiobackend import AudioBackend
 from polyfriture.application import APPLICATION_DISPLAY_NAME
+from polyfriture.channel_grid_settings import CHANNEL_GRID_COLUMNS
 from polyfriture.ui_settings import Ui_Settings_Dialog
+from polyfriture.settings_binding import bind_spinbox
 from polyfriture.settings_model import IntSetting, SettingsModel, ValueSetting
 from polyfriture.theme_manager import THEME_LABELS, THEME_SETTING
 
@@ -48,7 +50,7 @@ def _input_type(value):
 
 
 class GlobalSettings(SettingsModel):
-    """Audio preferences and the settings dialog's theme."""
+    """Audio preferences and the settings dialog's display preferences."""
 
     fields = {
         "deviceName": ValueSetting(""),
@@ -56,6 +58,7 @@ class GlobalSettings(SettingsModel):
         "secondChannel": IntSetting(0, minimum=0),
         "duoInput": ValueSetting(INPUT_TYPE_IDS["Single channel"], decode=_input_type),
         "themePreference": THEME_SETTING,
+        "channelGridColumns": CHANNEL_GRID_COLUMNS,
     }
 
 no_input_device_title = "No audio input device found"
@@ -70,6 +73,7 @@ no_input_device_message = f"""No audio input device has been found.
 
 class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
     theme_preference_changed = pyqtSignal(int)
+    channel_grid_columns_changed = pyqtSignal(int)
 
     def __init__(self, parent):
         QtWidgets.QDialog.__init__(self, parent)
@@ -92,8 +96,10 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
             self.inputTypeButtonGroup.setId(button, identifier)
             button.setText(label)
 
-        # Theme controls work even when no audio hardware is available.
+        # Display controls work even when no audio hardware is available.
         self.themeButtonGroup.idToggled.connect(self.theme_preference_toggled)
+        bind_spinbox(self.spinBox_channelGridColumns, self.settings_model,
+                     "channelGridColumns", self.channel_grid_columns_changed.emit)
 
         devices = AudioBackend().get_readable_devices_list()
 
@@ -237,6 +243,7 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
         values = {
             "duoInput": self.inputTypeButtonGroup.checkedId(),
             "themePreference": self.themeButtonGroup.checkedId(),
+            "channelGridColumns": self.spinBox_channelGridColumns.value(),
         }
         if self.comboBox_inputDevice.currentIndex() >= 0:
             values.update(deviceName=self.comboBox_inputDevice.currentText(),
@@ -248,6 +255,10 @@ class Settings_Dialog(QtWidgets.QDialog, Ui_Settings_Dialog):
     # method
     def restoreState(self, settings):
         self.settings_model.restore(settings)
+        columns = self.settings_model.get("channelGridColumns")
+        with QtCore.QSignalBlocker(self.spinBox_channelGridColumns):
+            self.spinBox_channelGridColumns.setValue(columns)
+        self.channel_grid_columns_changed.emit(columns)
         device_name = self.settings_model.get("deviceName")
         device_index = self.comboBox_inputDevice.findText(device_name)
         # change the device only if it exists in the device list

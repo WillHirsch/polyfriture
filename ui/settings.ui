@@ -133,6 +133,42 @@
     </widget>
    </item>
     <item>
+     <widget class="QGroupBox" name="channelGridGroup">
+      <property name="title">
+       <string>Channel grids</string>
+      </property>
+      <layout class="QVBoxLayout" name="channelGridLayout">
+       <item>
+        <layout class="QHBoxLayout" name="channelGridColumnsLayout">
+         <item>
+          <widget class="QLabel" name="label_channelGridColumns">
+           <property name="text">
+            <string>Columns within each panel:</string>
+           </property>
+           <property name="buddy">
+            <cstring>spinBox_channelGridColumns</cstring>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QSpinBox" name="spinBox_channelGridColumns"/>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QLabel" name="label_channelGridDescription">
+         <property name="text">
+          <string>Arrange channel plots inside panels. Scope channels share one plot; panel placement is unchanged.</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
      <widget class="QGroupBox" name="themeGroup">
       <property name="title">
        <string>Theme</string>

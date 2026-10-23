@@ -220,6 +220,7 @@ class Friture(QMainWindow, ):
 
         # settings changes
         self.settings_dialog.theme_preference_changed.connect(self.theme_manager.setThemePreference)
+        self.settings_dialog.channel_grid_columns_changed.connect(store.set_channel_grid_columns)
 
         # restore the settings and widgets geometries
         self.restoreAppState()
